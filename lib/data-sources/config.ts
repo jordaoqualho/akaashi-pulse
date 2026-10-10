@@ -3,6 +3,22 @@ import path from 'node:path';
 import { getPulseStateDir } from '../runtime-paths.mjs';
 import type { ProviderId } from '@/lib/providers';
 
+export type OperatingCostBasis = 'estimated-cost' | 'tokens' | 'requests' | 'tracked-time';
+export type OperatingCostCurrency = 'USD' | 'BRL' | 'EUR';
+
+export interface OperatingCostPlan {
+  monthlyCost: number;
+  enabled: boolean;
+  planId?: string;
+}
+
+export interface OperatingCostConfig {
+  month: string;
+  basis: OperatingCostBasis;
+  currency: OperatingCostCurrency;
+  plans: Partial<Record<ProviderId, OperatingCostPlan>>;
+}
+
 export type ConfigurableSource = ProviderId;
 
 interface SourceDirectoryConfig {
@@ -13,9 +29,69 @@ interface PulseConfig {
   sourceDirectories?: SourceDirectoryConfig;
   /** Undefined means automatic project-root detection; [] explicitly means all roots. */
   projectRoots?: string[];
+  operatingCost?: Partial<OperatingCostConfig>;
 }
 
 const CONFIG_FILE = () => path.join(getPulseStateDir(), 'config.json');
+
+export function getOperatingCostConfig(): OperatingCostConfig {
+  const fallback: OperatingCostConfig = {
+    month: new Date().toISOString().slice(0, 7),
+    basis: 'estimated-cost',
+    currency: 'USD',
+    plans: {},
+  };
+  try {
+    const parsed = JSON.parse(readFileSync(CONFIG_FILE(), 'utf8')) as PulseConfig;
+    const raw = parsed.operatingCost;
+    if (!raw || typeof raw !== 'object') return fallback;
+    const month = typeof raw.month === 'string' && /^\d{4}-\d{2}$/.test(raw.month)
+      ? raw.month
+      : fallback.month;
+    const basis = raw.basis === 'tokens' || raw.basis === 'requests' || raw.basis === 'tracked-time'
+      ? raw.basis
+      : 'estimated-cost';
+    const currency = raw.currency === 'BRL' || raw.currency === 'EUR' ? raw.currency : 'USD';
+    const plans: OperatingCostConfig['plans'] = {};
+    for (const source of ['claude', 'codex', 'cursor', 'antigravity'] as ProviderId[]) {
+      const plan = raw.plans?.[source];
+      if (!plan || typeof plan !== 'object') continue;
+      const monthlyCost = typeof plan.monthlyCost === 'number' && Number.isFinite(plan.monthlyCost)
+        ? Math.max(0, plan.monthlyCost)
+        : 0;
+      plans[source] = { monthlyCost, enabled: plan.enabled !== false };
+      if (typeof plan.planId === 'string' && plan.planId.length > 0) plans[source].planId = plan.planId;
+    }
+    return { month, basis, currency, plans };
+  } catch {
+    return fallback;
+  }
+}
+
+export async function setOperatingCostConfig(input: Partial<OperatingCostConfig>): Promise<OperatingCostConfig> {
+  const current = getOperatingCostConfig();
+  const next: OperatingCostConfig = {
+    month: typeof input.month === 'string' && /^\d{4}-\d{2}$/.test(input.month) ? input.month : current.month,
+    basis: input.basis === 'tokens' || input.basis === 'requests' || input.basis === 'tracked-time'
+      ? input.basis
+      : 'estimated-cost',
+    currency: input.currency === 'BRL' || input.currency === 'EUR' ? input.currency : current.currency,
+    plans: {},
+  };
+  for (const source of ['claude', 'codex', 'cursor', 'antigravity'] as ProviderId[]) {
+    const plan = input.plans?.[source] ?? current.plans[source];
+    if (!plan) continue;
+    const monthlyCost = Number(plan.monthlyCost);
+    next.plans[source] = {
+      monthlyCost: Number.isFinite(monthlyCost) ? Math.max(0, monthlyCost) : 0,
+      enabled: plan.enabled !== false,
+      ...(typeof plan.planId === 'string' && plan.planId.length > 0 ? { planId: plan.planId } : {}),
+    };
+  }
+  const config = await readConfig();
+  await writePulseConfig({ ...config, operatingCost: next });
+  return next;
+}
 
 /**
  * Reads optional local source overrides synchronously because provider

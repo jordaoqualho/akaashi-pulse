@@ -22,7 +22,6 @@ export async function getCachedScan(opts: { force?: boolean } = {}): Promise<Sca
 async function withRuntimeLimits(snapshot: ScanResultExtended): Promise<ScanResultExtended> {
   const claude = await readClaudeRateLimitsSnapshot();
   if (claude) snapshot.rateLimits.claude = claude;
-  else delete snapshot.rateLimits.claude;
   return snapshot;
 }
 

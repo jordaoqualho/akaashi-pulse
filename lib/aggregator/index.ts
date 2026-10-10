@@ -8,6 +8,7 @@ import type {
   UserRecord,
 } from '../types';
 import { costOfRecord, pricedCostOfRecord } from '../pricing/calculate';
+import { cleanSessionTitle } from '../session-title';
 import { getProvider } from '../providers';
 import { matchesModel } from '../providers/codex/model-route.js';
 import { projectNameFromCwd } from '../utils';
@@ -297,20 +298,28 @@ export function aggregateBySession(
   }
 
   const firstUserBySession = new Map<string, UserRecord>();
+  // Agents can log injected context (e.g. browser instructions) as its own
+  // first user record, so the title comes from the first message with text
+  // the person actually typed.
+  const firstTitleBySession = new Map<string, { timestamp: string; title: string }>();
   for (const u of userRecords) {
+    if (!map.has(u.sessionId)) continue;
     const existing = firstUserBySession.get(u.sessionId);
     if (!existing || u.timestamp < existing.timestamp) {
       firstUserBySession.set(u.sessionId, u);
+    }
+    const titled = firstTitleBySession.get(u.sessionId);
+    if (u.textPreview && (!titled || u.timestamp < titled.timestamp)) {
+      const title = cleanSessionTitle(u.textPreview);
+      if (title) firstTitleBySession.set(u.sessionId, { timestamp: u.timestamp, title });
     }
   }
 
   for (const s of map.values()) {
     s.durationMs = Math.max(0, new Date(s.endTime).getTime() - new Date(s.startTime).getTime());
     const u = firstUserBySession.get(s.sessionId);
-    if (u && u.textPreview) {
-      s.firstUserMessage = u.textPreview;
-      s.title = u.textPreview.slice(0, 80);
-    }
+    if (u && u.textPreview) s.firstUserMessage = u.textPreview;
+    s.title = firstTitleBySession.get(s.sessionId)?.title;
   }
 
   return Array.from(map.values()).sort((a, b) => b.endTime.localeCompare(a.endTime));

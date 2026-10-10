@@ -40,8 +40,8 @@ try {
   assert.equal(isTrackedProjectPath('cursor:workspace/app', 'cursor'), true);
   assert.equal(isTrackedProjectPath('Antigravity', 'antigravity'), true);
   assert.equal(
-    resolveProjectRootCwd(path.join(workspaces, 'pauloreal', 'packages', 'web')),
-    path.join(workspaces, 'pauloreal'),
+    resolveProjectRootCwd(path.join(workspaces, 'acme-web', 'packages', 'web')),
+    path.join(workspaces, 'acme-web'),
   );
   assert.equal(
     resolveProjectRootCwd(path.join(workspaces, 'vercel', 'examples', 'next')),
