@@ -1,0 +1,771 @@
+import { promises as fs, watch as fsWatch, type FSWatcher } from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { dedupAssistantRecords } from '../dedup';
+import { listProviders } from '../providers';
+import type { ProviderAdapter, ProviderId, SpawnedSessionLink } from '../providers';
+import type {
+  AssistantRecord,
+  AgentLimitSnapshot,
+  ScanResult,
+  ScanStats,
+  ScanStatsBySource,
+  UserRecord,
+} from '../types';
+import {
+  DEFAULT_INDEX_NAME,
+  loadPersistedIndex,
+  savePersistedIndex,
+  type PersistedFileEntry,
+} from './index-persist';
+import { linkSidechainParents, detectSubagentKind } from './link-sidechain';
+import { sanitizeForUser } from '../sanitize';
+
+interface FileEntry {
+  source: ProviderId;
+
+  parserVersion: string;
+  mtimeMs: number;
+  size: number;
+  assistantRecords: AssistantRecord[];
+  userRecords: UserRecord[];
+  parentLinks: Array<[string, string | null]>;
+  spawnedSessions: SpawnedSessionLink[];
+  limitSnapshot?: AgentLimitSnapshot;
+}
+
+interface SnapshotExtended extends ScanResult {
+  bySource: ScanStatsBySource[];
+}
+
+export interface IndexerStatus {
+  initialized: boolean;
+  isIndexing: boolean;
+  phase: IndexerPhase;
+  lastIndexedAt: string | null;
+  indexDurationMs: number | null;
+  filesIndexed: number;
+  recordsIndexed: number;
+  filesDiscovered: number;
+  filesProcessed: number;
+  cacheHits: number;
+  scanTotal: number;
+  bySource: ScanStatsBySource[];
+  watchers: number;
+  errors: string[];
+  pendingReconciles: number;
+  loadedFromDisk: boolean;
+}
+
+export type IndexerPhase =
+  | 'idle'
+  | 'discovering'
+  | 'scanning'
+  | 'building-snapshot'
+  | 'ready'
+  | 'error';
+
+const RECONCILE_DEBOUNCE_MS = 200;
+const SNAPSHOT_REBUILD_DEBOUNCE_MS = 100;
+const POLL_INTERVAL_MS = 30_000;
+const PERSIST_DEBOUNCE_MS = 2_000;
+const SCAN_DEPTH_LIMIT = 8;
+const MAX_ERROR_HISTORY = 20;
+
+// Cap how many files are parsed at once. A `Promise.all` over the whole file
+// list looks harmless at a few hundred transcripts, but a heavy user can have
+// 20k+ of them — at which point every one of those tasks holds an open read
+// stream (64 KB buffer each) and its fully parsed records at the same time, so
+// the cold index degrades into GC thrash and takes minutes instead of seconds.
+// It also builds an async chain thousands of nodes deep, which overflows the
+// stack inside Next.js dev's recursive async-debug walker (`visitAsyncNode`)
+// and surfaces as an unrelated-looking "Maximum call stack size exceeded".
+// Parsing is IO-bound, so a small multiple of the core count saturates the disk
+// without any of that.
+const SCAN_CONCURRENCY = Math.max(8, Math.min(32, (os.cpus()?.length ?? 4) * 4));
+
+// Run `worker` over `items` with at most `limit` in flight. Each lane pulls the
+// next index and awaits sequentially, so the async chain stays shallow no
+// matter how long `items` is.
+async function forEachLimited<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  if (items.length === 0) return;
+  let cursor = 0;
+  const lanes: Array<Promise<void>> = [];
+  for (let i = 0; i < Math.min(limit, items.length); i += 1) {
+    lanes.push(
+      (async () => {
+        for (;;) {
+          const idx = cursor;
+          cursor += 1;
+          if (idx >= items.length) return;
+          await worker(items[idx]);
+        }
+      })(),
+    );
+  }
+  await Promise.all(lanes);
+}
+
+class FileIndexer {
+
+  private readonly cacheName: string;
+  private files = new Map<string, FileEntry>();
+  private snapshot: SnapshotExtended | null = null;
+  private watchers = new Map<string, FSWatcher>();
+  private pollTimer: NodeJS.Timeout | null = null;
+  private snapshotRebuildTimer: NodeJS.Timeout | null = null;
+  private persistTimer: NodeJS.Timeout | null = null;
+  private fileDebouncers = new Map<string, NodeJS.Timeout>();
+  private initPromise: Promise<void> | null = null;
+  private isIndexing = false;
+  private lastIndexedAt: string | null = null;
+  private indexDurationMs: number | null = null;
+  private existingDirs: string[] = [];
+  private dirToProvider = new Map<string, ProviderAdapter>();
+  private errors: string[] = [];
+  private loadedFromDisk = false;
+  private phase: IndexerPhase = 'idle';
+  private filesDiscovered = 0;
+  private filesProcessed = 0;
+  private cacheHits = 0;
+  private scanTotal = 0;
+
+  private lastWorkStart: number | null = null;
+
+  private rescanPromise: Promise<SnapshotExtended> | null = null;
+
+  private mutationTail: Promise<unknown> = Promise.resolve();
+
+  constructor(cacheName: string = DEFAULT_INDEX_NAME) {
+    this.cacheName = cacheName;
+  }
+
+  private runExclusive<T>(work: () => Promise<T>): Promise<T> {
+    const next = this.mutationTail.then(work, work);
+    this.mutationTail = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  }
+
+  init(): Promise<void> {
+    if (!this.initPromise) {
+      this.initPromise = this.doInit();
+    }
+    return this.initPromise;
+  }
+
+  private async doInit(): Promise<void> {
+    const start = Date.now();
+    this.isIndexing = true;
+    this.phase = 'discovering';
+    this.lastWorkStart = start;
+    try {
+      await this.detectProviderDirs();
+
+      const persisted = await loadPersistedIndex(this.cacheName);
+      this.loadedFromDisk = persisted !== null;
+
+      const persistedMap = new Map<string, PersistedFileEntry>();
+      if (persisted) {
+        for (const entry of persisted.files) persistedMap.set(entry.filePath, entry);
+      }
+
+      await this.runExclusive(async () => {
+        await this.fullScan(persistedMap);
+        this.phase = 'building-snapshot';
+        this.rebuildSnapshotNow();
+        this.indexDurationMs = Date.now() - start;
+        this.lastIndexedAt = new Date().toISOString();
+        this.schedulePersist();
+      });
+      this.syncWatchersToDirs();
+      this.setupPolling();
+      this.phase = 'ready';
+    } catch (error) {
+      this.phase = 'error';
+      throw error;
+    } finally {
+      this.isIndexing = false;
+      if (!this.isIndexing && this.snapshot && this.phase !== 'error') this.phase = 'ready';
+    }
+  }
+
+  private async detectProviderDirs(): Promise<{ added: string[]; removed: string[] }> {
+    const wanted = new Map<string, ProviderAdapter>();
+    const dirs: string[] = [];
+    for (const provider of listProviders()) {
+      for (const dir of provider.getDirs()) {
+        if (await dirExists(dir)) {
+          if (!wanted.has(dir)) {
+            wanted.set(dir, provider);
+            dirs.push(dir);
+          }
+        }
+      }
+    }
+    const added: string[] = [];
+    const removed: string[] = [];
+    for (const dir of wanted.keys()) {
+      if (!this.dirToProvider.has(dir)) added.push(dir);
+    }
+    for (const dir of this.dirToProvider.keys()) {
+      if (!wanted.has(dir)) removed.push(dir);
+    }
+    this.dirToProvider = wanted;
+    this.existingDirs = dirs;
+    return { added, removed };
+  }
+
+  private async fullScan(persistedMap: Map<string, PersistedFileEntry>): Promise<void> {
+    const fileTasks: Array<{ file: string; provider: ProviderAdapter }> = [];
+    for (const [dir, provider] of this.dirToProvider) {
+      const files = await listJsonlFiles(dir, provider);
+      for (const f of files) fileTasks.push({ file: f, provider });
+    }
+
+    this.phase = 'scanning';
+    this.filesDiscovered = fileTasks.length;
+    this.filesProcessed = 0;
+    this.cacheHits = 0;
+    this.scanTotal = fileTasks.length;
+
+    const seenPaths = new Set<string>(fileTasks.map((t) => t.file));
+
+    await forEachLimited(
+      fileTasks,
+      SCAN_CONCURRENCY,
+      async ({ file, provider }) => {
+        try {
+          const stat = await fs.stat(file);
+          const persistedEntry = persistedMap.get(file);
+
+          if (
+            persistedEntry &&
+            persistedEntry.source === provider.id &&
+            persistedEntry.parserVersion === provider.parserVersion &&
+            persistedEntry.mtimeMs === stat.mtimeMs &&
+            persistedEntry.size === stat.size
+          ) {
+            this.files.set(file, {
+              source: provider.id,
+              parserVersion: provider.parserVersion,
+              mtimeMs: stat.mtimeMs,
+              size: stat.size,
+              assistantRecords: persistedEntry.assistantRecords,
+              userRecords: persistedEntry.userRecords,
+              parentLinks: persistedEntry.parentLinks,
+              spawnedSessions: persistedEntry.spawnedSessions ?? [],
+              limitSnapshot: persistedEntry.limitSnapshot,
+            });
+            this.cacheHits += 1;
+            this.filesProcessed += 1;
+            return;
+          }
+          const parsed = await provider.parseFile(file);
+          this.files.set(file, {
+            source: provider.id,
+            parserVersion: provider.parserVersion,
+            mtimeMs: stat.mtimeMs,
+            size: stat.size,
+            assistantRecords: parsed.assistant,
+            userRecords: parsed.user,
+            parentLinks: parsed.parentLinks,
+            spawnedSessions: parsed.spawnedSessions ?? [],
+            limitSnapshot: parsed.limitSnapshot,
+          });
+          this.filesProcessed += 1;
+        } catch (err) {
+          this.recordError(`parse ${file}: ${(err as Error).message}`);
+          this.filesProcessed += 1;
+        }
+      },
+    );
+
+    for (const tracked of Array.from(this.files.keys())) {
+      if (!seenPaths.has(tracked)) this.files.delete(tracked);
+    }
+  }
+
+  private syncWatchersToDirs(): void {
+
+    for (const [dir, watcher] of this.watchers) {
+      if (!this.dirToProvider.has(dir)) {
+        try {
+          watcher.close();
+        } catch {
+
+        }
+        this.watchers.delete(dir);
+      }
+    }
+
+    for (const [dir, provider] of this.dirToProvider) {
+      if (this.watchers.has(dir)) continue;
+      try {
+        const watcher = fsWatch(dir, { recursive: true }, (_eventType, filename) => {
+          if (!filename || typeof filename !== 'string') return;
+          const extensions = provider.fileExtensions ?? ['.jsonl'];
+          if (!extensions.some((extension) => filename.endsWith(extension))) return;
+          const fullPath = path.join(dir, filename);
+          if (provider.isCandidateFile && !provider.isCandidateFile(fullPath)) return;
+          this.scheduleFileReconcile(fullPath, provider);
+        });
+        watcher.on('error', (err) => {
+          this.recordError(`watcher ${dir}: ${err.message}`);
+        });
+        this.watchers.set(dir, watcher);
+      } catch (err) {
+        this.recordError(`watch ${dir}: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  private setupPolling(): void {
+    if (this.pollTimer) clearInterval(this.pollTimer);
+
+    const isMcp = this.cacheName === 'mcp';
+    const envOpt = process.env.AKAASHI_PULSE_POLL_FALLBACK;
+    const enable = envOpt === '1' ? true : envOpt === '0' ? false : !isMcp;
+    if (!enable) return;
+    this.pollTimer = setInterval(() => {
+      this.pollOnce().catch((err) => this.recordError(`poll: ${(err as Error).message}`));
+    }, POLL_INTERVAL_MS);
+    this.pollTimer.unref?.();
+  }
+
+  private async pollOnce(): Promise<void> {
+    await this.runExclusive(async () => {
+      const start = Date.now();
+
+      const dirDiff = await this.detectProviderDirs();
+      let changed = dirDiff.added.length > 0 || dirDiff.removed.length > 0;
+      if (changed) this.syncWatchersToDirs();
+
+      const fileTasks: Array<{ file: string; provider: ProviderAdapter }> = [];
+      for (const [dir, provider] of this.dirToProvider) {
+        const files = await listJsonlFiles(dir, provider);
+        for (const f of files) fileTasks.push({ file: f, provider });
+      }
+      const seenPaths = new Set<string>(fileTasks.map((t) => t.file));
+      await forEachLimited(
+        fileTasks,
+        SCAN_CONCURRENCY,
+        async ({ file, provider }) => {
+          try {
+            const stat = await fs.stat(file);
+            const existing = this.files.get(file);
+            if (existing && existing.mtimeMs === stat.mtimeMs && existing.size === stat.size) {
+              return;
+            }
+            const parsed = await provider.parseFile(file);
+            this.files.set(file, {
+              source: provider.id,
+              parserVersion: provider.parserVersion,
+              mtimeMs: stat.mtimeMs,
+              size: stat.size,
+              assistantRecords: parsed.assistant,
+              userRecords: parsed.user,
+              parentLinks: parsed.parentLinks,
+              spawnedSessions: parsed.spawnedSessions ?? [],
+              limitSnapshot: parsed.limitSnapshot,
+            });
+            changed = true;
+          } catch (err) {
+            this.recordError(`poll-parse ${file}: ${(err as Error).message}`);
+          }
+        },
+      );
+      for (const tracked of Array.from(this.files.keys())) {
+        if (!seenPaths.has(tracked)) {
+          this.files.delete(tracked);
+          changed = true;
+        }
+      }
+      if (changed) {
+        this.lastWorkStart = start;
+        this.scheduleSnapshotRebuild();
+        this.schedulePersist();
+      }
+    });
+  }
+
+  private scheduleFileReconcile(filePath: string, provider: ProviderAdapter): void {
+    const existing = this.fileDebouncers.get(filePath);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      this.fileDebouncers.delete(filePath);
+      this.reconcileFile(filePath, provider).catch((err) =>
+        this.recordError(`reconcile ${filePath}: ${(err as Error).message}`),
+      );
+    }, RECONCILE_DEBOUNCE_MS);
+    timer.unref?.();
+    this.fileDebouncers.set(filePath, timer);
+  }
+
+  private async reconcileFile(filePath: string, provider: ProviderAdapter): Promise<void> {
+    await this.runExclusive(async () => {
+      const workStart = Date.now();
+      let stat: Awaited<ReturnType<typeof fs.stat>> | null = null;
+      try {
+        stat = await fs.stat(filePath);
+      } catch {
+
+      }
+      if (!stat || !stat.isFile()) {
+        if (this.files.has(filePath)) {
+          this.files.delete(filePath);
+          this.lastWorkStart = workStart;
+          this.scheduleSnapshotRebuild();
+          this.schedulePersist();
+        }
+        return;
+      }
+      const existing = this.files.get(filePath);
+      if (existing && existing.mtimeMs === stat.mtimeMs && existing.size === stat.size) {
+        return;
+      }
+      try {
+        const parsed = await provider.parseFile(filePath);
+        this.files.set(filePath, {
+          source: provider.id,
+          parserVersion: provider.parserVersion,
+          mtimeMs: stat.mtimeMs,
+          size: stat.size,
+          assistantRecords: parsed.assistant,
+          userRecords: parsed.user,
+          parentLinks: parsed.parentLinks,
+          spawnedSessions: parsed.spawnedSessions ?? [],
+          limitSnapshot: parsed.limitSnapshot,
+        });
+        this.lastWorkStart = workStart;
+        this.scheduleSnapshotRebuild();
+        this.schedulePersist();
+      } catch (err) {
+        this.recordError(`parse ${filePath}: ${(err as Error).message}`);
+      }
+    });
+  }
+
+  private scheduleSnapshotRebuild(): void {
+    if (this.snapshotRebuildTimer) clearTimeout(this.snapshotRebuildTimer);
+    this.snapshotRebuildTimer = setTimeout(() => {
+      this.snapshotRebuildTimer = null;
+      this.rebuildSnapshotNow();
+    }, SNAPSHOT_REBUILD_DEBOUNCE_MS);
+    this.snapshotRebuildTimer.unref?.();
+  }
+
+  private rebuildSnapshotNow(): void {
+    const snapshotStart = Date.now();
+    const workStart = this.lastWorkStart ?? snapshotStart;
+    const assistant: AssistantRecord[] = [];
+    const user: UserRecord[] = [];
+    const parentMap: Record<string, string | null> = {};
+    const spawnedSessions: SpawnedSessionLink[] = [];
+    const rateLimits: Partial<Record<ProviderId, AgentLimitSnapshot>> = {};
+    let recordsParsed = 0;
+
+    const bySource = Object.fromEntries(
+      listProviders().map((provider) => [provider.id, {
+        source: provider.id,
+        filesScanned: 0,
+        recordsParsed: 0,
+        assistantRecords: 0,
+        scannedDirs: [],
+      }]),
+    ) as unknown as Record<ProviderId, ScanStatsBySource>;
+    for (const [dir, provider] of this.dirToProvider) {
+      bySource[provider.id].scannedDirs.push(dir);
+    }
+
+    for (const entry of this.files.values()) {
+      // Appended one by one rather than with `push(...arr)`: the spread passes
+      // every record as a separate argument, so a single long transcript is
+      // enough to blow the argument limit and throw "Maximum call stack size
+      // exceeded" here.
+      for (const rec of entry.assistantRecords) assistant.push(rec);
+      for (const rec of entry.userRecords) user.push(rec);
+      for (const [uuid, parent] of entry.parentLinks) parentMap[uuid] = parent;
+      for (const link of entry.spawnedSessions) spawnedSessions.push(link);
+      if (entry.limitSnapshot) {
+        const current = rateLimits[entry.limitSnapshot.source];
+        if (!current || entry.limitSnapshot.observedAt > current.observedAt) {
+          rateLimits[entry.limitSnapshot.source] = entry.limitSnapshot;
+        }
+      }
+      recordsParsed += entry.assistantRecords.length + entry.userRecords.length;
+      bySource[entry.source].filesScanned += 1;
+      bySource[entry.source].recordsParsed +=
+        entry.assistantRecords.length + entry.userRecords.length;
+    }
+
+    // Plain `<` / `>` instead of `localeCompare`: timestamps are ISO-8601, so
+    // byte order already is chronological order, and localeCompare's ICU
+    // collation costs orders of magnitude more per comparison — measurable
+    // across millions of records. Matches how link-sidechain.ts sorts.
+    const dedupedAssistants = dedupAssistantRecords(assistant).sort(byTimestamp);
+    const dedupedUsers = dedupUserRecords(user).sort(byTimestamp);
+
+    linkSidechainParents({
+      assistantRecords: dedupedAssistants,
+      userRecords: dedupedUsers,
+      parentMap,
+      spawnedSessions,
+    });
+
+    // Stamp each sidechain record with whether it's a Workflow (ultracode)
+    // sub-agent vs a plain Task sub-agent — derived purely from the file
+    // path, so it's idempotent and cache-safe to (re)compute every
+    // rebuild. Drives the "Workflow" badge on the spawning turn. Only
+    // sidechain records can be sub-agents, so non-sidechain records are
+    // skipped (detectSubagentKind would return null anyway).
+    for (const rec of dedupedAssistants) {
+      if (rec.isSidechain) rec.isWorkflowSubagent = detectSubagentKind(rec.filePath) === 'workflow';
+    }
+
+    for (const rec of dedupedAssistants) bySource[rec.source].assistantRecords += 1;
+
+    const stats: ScanStats = {
+      filesScanned: this.files.size,
+      recordsParsed,
+      assistantRecords: dedupedAssistants.length,
+
+      durationMs: Date.now() - workStart,
+      scannedDirs: this.existingDirs,
+    };
+
+      this.snapshot = {
+      records: dedupedAssistants,
+      userRecords: dedupedUsers,
+      parentMap,
+      stats,
+      bySource: Object.values(bySource),
+      rateLimits,
+      };
+    this.phase = 'ready';
+    this.lastWorkStart = null;
+  }
+
+  getSnapshot(): SnapshotExtended {
+    if (!this.snapshot) {
+      throw new Error('Indexer not initialized — call init() first.');
+    }
+    return this.snapshot;
+  }
+
+  async forceRescan(): Promise<SnapshotExtended> {
+
+    const isFirstInit = !this.initPromise;
+
+    await this.init();
+
+    if (isFirstInit) return this.snapshot!;
+
+    if (this.rescanPromise) return this.rescanPromise;
+    this.rescanPromise = this.runRescan();
+    try {
+      return await this.rescanPromise;
+    } finally {
+      this.rescanPromise = null;
+    }
+  }
+
+  private async runRescan(): Promise<SnapshotExtended> {
+    this.isIndexing = true;
+    this.phase = 'discovering';
+    try {
+      return await this.runExclusive(async () => {
+        const start = Date.now();
+        this.lastWorkStart = start;
+        if (this.snapshotRebuildTimer) {
+          clearTimeout(this.snapshotRebuildTimer);
+          this.snapshotRebuildTimer = null;
+        }
+        if (this.persistTimer) {
+          clearTimeout(this.persistTimer);
+          this.persistTimer = null;
+        }
+        this.files.clear();
+        await this.detectProviderDirs();
+        await this.fullScan(new Map());
+        this.phase = 'building-snapshot';
+        this.rebuildSnapshotNow();
+        this.indexDurationMs = Date.now() - start;
+        this.lastIndexedAt = new Date().toISOString();
+        this.syncWatchersToDirs();
+        this.schedulePersist();
+        this.phase = 'ready';
+        return this.snapshot!;
+      });
+    } catch (error) {
+      this.phase = 'error';
+      throw error;
+    } finally {
+      this.isIndexing = false;
+      if (this.snapshot && this.phase !== 'error') this.phase = 'ready';
+    }
+  }
+
+  getStatus(): IndexerStatus {
+    const snap = this.snapshot;
+    return {
+      initialized: snap !== null,
+      isIndexing: this.isIndexing,
+      phase: this.phase,
+      lastIndexedAt: this.lastIndexedAt,
+      indexDurationMs: this.indexDurationMs,
+      filesIndexed: this.files.size,
+      recordsIndexed: snap?.stats.assistantRecords ?? 0,
+      filesDiscovered: this.filesDiscovered,
+      filesProcessed: this.filesProcessed,
+      cacheHits: this.cacheHits,
+      scanTotal: this.scanTotal,
+      bySource: snap?.bySource ?? [],
+      watchers: this.watchers.size,
+      errors: this.errors.slice(-MAX_ERROR_HISTORY),
+      pendingReconciles: this.fileDebouncers.size,
+      loadedFromDisk: this.loadedFromDisk,
+    };
+  }
+
+  private schedulePersist(): void {
+    if (this.persistTimer) clearTimeout(this.persistTimer);
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      const entries: PersistedFileEntry[] = [];
+      for (const [filePath, entry] of this.files) {
+        entries.push({
+          filePath,
+          source: entry.source,
+          parserVersion: entry.parserVersion,
+          mtimeMs: entry.mtimeMs,
+          size: entry.size,
+          assistantRecords: entry.assistantRecords,
+          userRecords: entry.userRecords,
+          parentLinks: entry.parentLinks,
+          spawnedSessions: entry.spawnedSessions,
+          limitSnapshot: entry.limitSnapshot,
+        });
+      }
+      savePersistedIndex(
+        {
+          savedAt: new Date().toISOString(),
+          files: entries,
+        },
+        this.cacheName,
+      ).catch((err) => this.recordError(`persist: ${(err as Error).message}`));
+    }, PERSIST_DEBOUNCE_MS);
+    this.persistTimer.unref?.();
+  }
+
+  private recordError(msg: string): void {
+    const stamped = `${new Date().toISOString()} ${sanitizeForUser(msg)}`;
+    this.errors.push(stamped);
+    if (this.errors.length > MAX_ERROR_HISTORY * 2) {
+      this.errors.splice(0, this.errors.length - MAX_ERROR_HISTORY);
+    }
+    if (process.env.AKAASHI_PULSE_DEBUG) {
+
+      console.error(`[akaashi-pulse:indexer] ${new Date().toISOString()} ${msg}`);
+    }
+  }
+
+  private disposeWatchers(): void {
+    for (const w of this.watchers.values()) {
+      try {
+        w.close();
+      } catch {
+
+      }
+    }
+    this.watchers.clear();
+  }
+
+  dispose(): void {
+    this.disposeWatchers();
+    if (this.pollTimer) clearInterval(this.pollTimer);
+    if (this.snapshotRebuildTimer) clearTimeout(this.snapshotRebuildTimer);
+    if (this.persistTimer) clearTimeout(this.persistTimer);
+    for (const t of this.fileDebouncers.values()) clearTimeout(t);
+    this.fileDebouncers.clear();
+  }
+}
+
+async function dirExists(p: string): Promise<boolean> {
+  try {
+    const s = await fs.stat(p);
+    return s.isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+async function listJsonlFiles(rootDir: string, provider: ProviderAdapter): Promise<string[]> {
+  const out: string[] = [];
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > SCAN_DEPTH_LIMIT) return;
+    let entries: import('node:fs').Dirent[];
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        if (provider.shouldSkipDir(e.name)) continue;
+        await walk(full, depth + 1);
+      } else if (
+        e.isFile() &&
+        (provider.fileExtensions ?? ['.jsonl']).some((extension) => e.name.endsWith(extension)) &&
+        (!provider.isCandidateFile || provider.isCandidateFile(full))
+      ) {
+        out.push(full);
+      }
+    }
+  }
+  await walk(rootDir, 0);
+  return out;
+}
+
+function byTimestamp(a: { timestamp: string }, b: { timestamp: string }): number {
+  return a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : 0;
+}
+
+function dedupUserRecords(records: UserRecord[]): UserRecord[] {
+  const seen = new Set<string>();
+  return records.filter((r) => {
+    const k = r.uuid;
+    if (!k) return true;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+declare global {
+  var __akaashiPulseIndexers: Map<string, FileIndexer> | undefined;
+}
+
+function indexerRegistry(): Map<string, FileIndexer> {
+  if (!globalThis.__akaashiPulseIndexers) {
+    globalThis.__akaashiPulseIndexers = new Map();
+  }
+  return globalThis.__akaashiPulseIndexers;
+}
+
+export function getIndexer(cacheName: string = DEFAULT_INDEX_NAME): FileIndexer {
+  const reg = indexerRegistry();
+  let inst = reg.get(cacheName);
+  if (!inst) {
+    inst = new FileIndexer(cacheName);
+    reg.set(cacheName, inst);
+  }
+  return inst;
+}

@@ -1,0 +1,51 @@
+import { listProviders } from '../providers';
+import type { ProviderId } from '../providers';
+import { ensurePricingLoaded } from '../pricing/store';
+import type { ScanResult, ScanStatsBySource } from '../types';
+import { getIndexer, type IndexerStatus } from './indexer';
+import { readClaudeRateLimitsSnapshot } from '../providers/claude/limits';
+
+export interface ScanResultExtended extends ScanResult {
+  bySource: ScanStatsBySource[];
+}
+
+export async function getCachedScan(opts: { force?: boolean } = {}): Promise<ScanResultExtended> {
+  ensurePricingLoaded();
+  const idx = getIndexer();
+  if (opts.force) {
+    return withRuntimeLimits(await idx.forceRescan());
+  }
+  await idx.init();
+  return withRuntimeLimits(idx.getSnapshot());
+}
+
+async function withRuntimeLimits(snapshot: ScanResultExtended): Promise<ScanResultExtended> {
+  const claude = await readClaudeRateLimitsSnapshot();
+  if (claude) snapshot.rateLimits.claude = claude;
+  else delete snapshot.rateLimits.claude;
+  return snapshot;
+}
+
+export async function scanAll(opts: { force?: boolean } = {}): Promise<ScanResultExtended> {
+  return getCachedScan(opts);
+}
+
+export function clearScanCache() {
+
+}
+
+export function getScannedDirs(): string[] {
+  const out: string[] = [];
+  for (const p of listProviders()) {
+    out.push(...p.getDirs());
+  }
+  return Array.from(new Set(out));
+}
+
+export function getScannedDirsBySource(): Array<{ source: ProviderId; dirs: string[] }> {
+  return listProviders().map((p) => ({ source: p.id, dirs: p.getDirs() }));
+}
+
+export function getIndexerStatus(): IndexerStatus {
+  return getIndexer().getStatus();
+}

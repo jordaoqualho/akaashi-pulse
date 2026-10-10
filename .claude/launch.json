@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "akaashi-pulse-dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "port": 3738
+    },
+    {
+      "name": "akaashi-pulse-prod",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["bin/cli.mjs", "-p", "3739", "--no-open", "--strict-port"],
+      "port": 3739
+    }
+  ]
+}

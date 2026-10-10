@@ -1,0 +1,94 @@
+{
+  "name": "akaashi-pulse",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AKAASHI Pulse — local AI development analytics for Claude Code and Codex",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "codex",
+    "openai",
+    "usage",
+    "dashboard",
+    "cli",
+    "tokens",
+    "cost"
+  ],
+  "license": "MIT",
+  "author": "Jordão Qualho",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jordaoqualho/akaashi-pulse.git"
+  },
+  "homepage": "https://github.com/jordaoqualho/akaashi-pulse#readme",
+  "bugs": {
+    "url": "https://github.com/jordaoqualho/akaashi-pulse/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "packageManager": "pnpm@10.30.3",
+  "bin": {
+    "akaashi-pulse": "bin/cli.mjs"
+  },
+  "scripts": {
+    "dev": "next dev -p 3738",
+    "build": "next build && node scripts/build-mcp.mjs && node scripts/build-report.mjs && node scripts/postbuild.mjs && node scripts/smoke-standalone.mjs",
+    "build:mcp": "node scripts/build-mcp.mjs",
+    "build:report": "node scripts/build-report.mjs",
+    "start": "node bin/cli.mjs",
+    "start:next": "next start -p 3737",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "update-pricing": "node scripts/update-pricing.mjs",
+  "test": "node --experimental-strip-types --no-warnings scripts/test-codex-parser.mjs && node --experimental-strip-types --no-warnings scripts/test-claude-statusline.mjs && node --experimental-strip-types --no-warnings scripts/test-cursor-parser.mjs && node --experimental-strip-types --no-warnings scripts/test-antigravity-parser.mjs && node --experimental-strip-types --no-warnings scripts/test-pricing-snapshot.mjs && node --experimental-strip-types --no-warnings scripts/test-pricing-store.mjs && node --experimental-strip-types --no-warnings scripts/test-turns.mjs && node --experimental-strip-types --no-warnings scripts/test-index-persist.mjs && node --experimental-strip-types --no-warnings scripts/test-sidechain.mjs && node --experimental-strip-types --no-warnings scripts/test-source-merge.mjs && node --experimental-strip-types --no-warnings scripts/test-cost-from-usage.mjs && node --experimental-strip-types --no-warnings scripts/test-range.mjs && node --experimental-strip-types --no-warnings scripts/test-project-scope.mjs && node scripts/test-unpriced.mjs && node scripts/check-parser-versions.mjs",
+    "test:mcp": "node scripts/test-mcp-server.mjs",
+    "clean": "node -e \"for (const p of ['.next','node_modules','tsconfig.tsbuildinfo']) require('node:fs').rmSync(p,{recursive:true,force:true})\"",
+    "doctor": "node bin/cli.mjs doctor"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "commander": "^13.1.0",
+    "get-port": "^7.1.0",
+    "lucide-react": "^1.54.0",
+    "open": "^10.1.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.5",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "boxen": "^8.0.1",
+    "chalk": "^5.6.2",
+    "cli-table3": "^0.6.5",
+    "cli-truncate": "^6.0.0",
+    "clsx": "^2.1.1",
+    "esbuild": "^0.28.0",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "^15.1.0",
+    "figures": "^6.1.0",
+    "next": "^15.1.0",
+    "postcss": "^8.5.0",
+    "react": "^19.0.0",
+    "react-day-picker": "^10.0.1",
+    "react-dom": "^19.0.0",
+    "recharts": "^2.15.0",
+    "string-width": "^8.2.1",
+    "tailwind-merge": "^2.6.0",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.0",
+    "zod": "^3.24.1"
+  }
+}

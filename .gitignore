@@ -1,0 +1,52 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+.pnpm-store/
+.yarn/install-state.gz
+
+# testing
+coverage/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+
+# production
+build/
+dist/
+
+# misc
+.DS_Store
+*.pem
+.idea/
+.vscode/
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env
+.env
+.env.*
+!.env.example
+
+# typescript
+*.tsbuildinfo
+
+# cache
+.cache/
+.turbo/
+
+# legacy lockfiles (the project uses pnpm-lock.yaml)
+package-lock.json
+yarn.lock
+
+# ad-hoc browser verification artefacts
+.playwright-mcp/
+
+# Per-developer Claude Code permissions.
+.claude/settings.local.json
