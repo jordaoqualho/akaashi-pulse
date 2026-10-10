@@ -2,9 +2,11 @@
 
 import { ArrowDown, ArrowUp, ChevronsUpDown, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { formatPct, formatTokensCompact, formatUSD, formatUSDPrecise } from '@/lib/utils';
+import { formatPct, formatTokensCompact, formatCurrency, formatCurrencyPrecise } from '@/lib/utils';
 import type { Locale } from '@/lib/i18n/dict';
 import type { ProviderId } from '@/lib/providers/types';
+import { useCurrency } from '@/lib/currency/context';
+import { Section } from '@/components/section';
 
 export interface BenchmarkRow {
   id: string;
@@ -25,6 +27,8 @@ export interface BenchmarkRow {
 }
 
 export interface BenchmarkTableLabels {
+  title: string;
+  description: string;
   searchPlaceholder: string;
   allProviders: string;
   noMatches: string;
@@ -51,6 +55,7 @@ export function ModelBenchmarkTable({
   labels: BenchmarkTableLabels;
   locale: Locale;
 }) {
+  const { currency } = useCurrency();
   const [query, setQuery] = useState('');
   const [provider, setProvider] = useState<'all' | ProviderId>('all');
   const [sortKey, setSortKey] = useState<SortKey>('requests');
@@ -86,30 +91,34 @@ export function ModelBenchmarkTable({
   }
 
   return (
-    <div>
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="relative min-w-[220px] flex-1">
-          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" aria-hidden />
-          <span className="sr-only">{labels.searchPlaceholder}</span>
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={labels.searchPlaceholder}
-            className="h-9 w-full rounded-button border border-border bg-bg-surface pl-9 pr-3 text-sm text-text-primary outline-none transition-colors placeholder:text-text-tertiary focus:border-brand focus:ring-2 focus:ring-brand/15"
-          />
-        </label>
-        <select
-          value={provider}
-          onChange={(event) => setProvider(event.target.value as 'all' | ProviderId)}
-          className="h-9 rounded-button border border-border bg-bg-surface px-3 text-sm text-text-primary outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
-          aria-label={labels.allProviders}
-        >
-          <option value="all">{labels.allProviders}</option>
-          {providerOptions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-        </select>
-        <span className="text-xs text-text-tertiary">{labels.modelsCount.replace('{count}', String(visibleRows.length))}</span>
-      </div>
-
+    <Section
+      title={labels.title}
+      desc={labels.description}
+      right={
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:max-w-full">
+          <label className="relative min-w-[200px] flex-1 sm:w-[240px] sm:flex-none lg:w-[280px]">
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" aria-hidden />
+            <span className="sr-only">{labels.searchPlaceholder}</span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={labels.searchPlaceholder}
+              className="h-9 w-full rounded-button border border-border bg-bg-surface pl-9 pr-3 text-sm text-text-primary outline-none transition-colors placeholder:text-text-tertiary focus:border-brand focus:ring-2 focus:ring-brand/15"
+            />
+          </label>
+          <select
+            value={provider}
+            onChange={(event) => setProvider(event.target.value as 'all' | ProviderId)}
+            className="h-9 min-w-[132px] rounded-button border border-border bg-bg-surface px-3 text-sm text-text-primary outline-none focus:border-brand focus:ring-2 focus:ring-brand/15"
+            aria-label={labels.allProviders}
+          >
+            <option value="all">{labels.allProviders}</option>
+            {providerOptions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+          </select>
+          <span className="ml-auto whitespace-nowrap text-xs text-text-tertiary">{labels.modelsCount.replace('{count}', String(visibleRows.length))}</span>
+        </div>
+      }
+    >
       <div className="mt-4 overflow-x-auto rounded-button border border-border">
         <table className="w-full min-w-[900px] text-sm">
           <thead className="bg-bg-surface-hi/50 text-left text-xs text-text-tertiary">
@@ -141,11 +150,11 @@ export function ModelBenchmarkTable({
                   <div className="mt-0.5 text-xs text-text-tertiary">{labels.requests} · {formatTokensCompact(row.tokens, locale)} {labels.tokens}</div>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
-                  <div className="num-mono text-text-primary">{formatUSD(row.cost)}</div>
-                  <div className="mt-0.5 text-xs text-text-tertiary">{row.averageCost == null ? '—' : `${formatUSDPrecise(row.averageCost)} / ${labels.requests.toLowerCase()}`}</div>
+                  <div className="num-mono text-text-primary">{formatCurrency(row.cost, currency)}</div>
+                  <div className="mt-0.5 text-xs text-text-tertiary">{row.averageCost == null ? '—' : `${formatCurrencyPrecise(row.averageCost, currency)} / ${labels.requests.toLowerCase()}`}</div>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
-                  <div className="num-mono text-text-primary">{row.costPerMillion == null ? '—' : formatUSDPrecise(row.costPerMillion)}</div>
+                  <div className="num-mono text-text-primary">{row.costPerMillion == null ? '—' : formatCurrencyPrecise(row.costPerMillion, currency)}</div>
                   <div className="mt-0.5 text-xs text-text-tertiary">{labels.observedCost}</div>
                 </td>
                 <td className="w-[150px] px-4 py-3">
@@ -166,8 +175,8 @@ export function ModelBenchmarkTable({
                 <td className="whitespace-nowrap px-4 py-3 text-right">
                   {row.priced ? (
                     <div className="num-mono text-xs text-text-secondary">
-                      <div>in {row.inputPrice == null ? '—' : formatUSDPrecise(row.inputPrice)}</div>
-                      <div className="mt-0.5">out {row.outputPrice == null ? '—' : formatUSDPrecise(row.outputPrice)}</div>
+                      <div>in {row.inputPrice == null ? '—' : formatCurrencyPrecise(row.inputPrice, currency)}</div>
+                      <div className="mt-0.5">out {row.outputPrice == null ? '—' : formatCurrencyPrecise(row.outputPrice, currency)}</div>
                     </div>
                   ) : (
                     <span className="pill-muted">—</span>
@@ -183,7 +192,7 @@ export function ModelBenchmarkTable({
           </tbody>
         </table>
       </div>
-    </div>
+    </Section>
   );
 }
 

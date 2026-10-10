@@ -1,9 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { cn, formatUSD, shortenModel } from '@/lib/utils';
+import { cn, formatCurrency, shortenModel } from '@/lib/utils';
 import { useT } from '@/lib/i18n/context';
 import { ScrollShadows } from '@/components/scroll-shadows';
+import { useCurrency } from '@/lib/currency/context';
 
 export interface PricingRow {
   model: string;
@@ -18,6 +19,7 @@ type SortKey = keyof Omit<PricingRow, 'model'> | 'model';
 
 export function PricingTable({ rows }: { rows: PricingRow[] }) {
   const t = useT();
+  const { currency } = useCurrency();
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('model');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -98,11 +100,11 @@ export function PricingTable({ rows }: { rows: PricingRow[] }) {
                 <td className="px-3 py-2 text-text-primary" title={p.model}>
                   {shortenModel(p.model)}
                 </td>
-                <td className="px-3 py-2 num-mono text-right">{formatUSD(p.input)}</td>
-                <td className="px-3 py-2 num-mono text-right">{formatUSD(p.output)}</td>
-                <td className="px-3 py-2 num-mono text-right text-text-secondary">{formatUSD(p.cacheCreation5m)}</td>
-                <td className="px-3 py-2 num-mono text-right text-text-secondary">{formatUSD(p.cacheCreation1h)}</td>
-                <td className="px-3 py-2 num-mono text-right text-success">{formatUSD(p.cacheRead)}</td>
+                <td className="px-3 py-2 num-mono text-right">{formatCurrency(p.input, currency)}</td>
+                <td className="px-3 py-2 num-mono text-right">{formatCurrency(p.output, currency)}</td>
+                <td className="px-3 py-2 num-mono text-right text-text-secondary">{formatCurrency(p.cacheCreation5m, currency)}</td>
+                <td className="px-3 py-2 num-mono text-right text-text-secondary">{formatCurrency(p.cacheCreation1h, currency)}</td>
+                <td className="px-3 py-2 num-mono text-right text-success">{formatCurrency(p.cacheRead, currency)}</td>
               </tr>
             ))}
             {sorted.length === 0 && (

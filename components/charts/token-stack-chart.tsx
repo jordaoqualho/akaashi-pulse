@@ -9,8 +9,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { formatTokensCompact, formatUSD } from '@/lib/utils';
+import { formatTokensCompact, formatCurrency } from '@/lib/utils';
 import { useT, useI18n } from '@/lib/i18n/context';
+import { useCurrency } from '@/lib/currency/context';
 
 export interface TokenStackDatum {
   label: string;
@@ -109,6 +110,7 @@ function TokenStackTooltip(props: {
 }) {
   const t = useT();
   const { locale } = useI18n();
+  const { currency } = useCurrency();
   if (!props.active || !props.payload || !props.payload.length) return null;
   const d = props.payload[0].payload;
   const total = d.input + d.output + d.cacheRead + d.cacheCreation;
@@ -127,7 +129,7 @@ function TokenStackTooltip(props: {
       </div>
       <div className="flex items-center justify-between mt-1">
         <span className="text-text-secondary">{t('chart.tooltip.cost')}</span>
-        <span className="num-mono text-brand">{formatUSD(d.cost)}</span>
+        <span className="num-mono text-brand">{formatCurrency(d.cost, currency)}</span>
       </div>
       <div className="flex items-center justify-between mt-1">
         <span className="text-text-secondary">{t('chart.tooltip.requests')}</span>

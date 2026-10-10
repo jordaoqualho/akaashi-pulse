@@ -8,13 +8,14 @@ import { TokenStackChart, type TokenStackDatum } from '@/components/charts/token
 import { pricedCostOfRecord } from '@/lib/pricing/calculate';
 import {
   formatTokensCompact,
-  formatUSD,
+  formatCurrency,
   formatRelative,
   formatDateTime,
   formatDuration,
   shortHash,
 } from '@/lib/utils';
 import { getServerT, getServerLocale } from '@/lib/i18n/server';
+import { getServerCurrency } from '@/lib/currency/server';
 import { resolveSource, filterBySource } from '@/lib/source';
 import { getProvider } from '@/lib/providers';
 
@@ -35,6 +36,7 @@ export default async function SessionDetailPage({
   const sessionId = decodeURIComponent(id);
   const t = await getServerT();
   const locale = await getServerLocale();
+  const currency = await getServerCurrency();
   const scan = await getCachedScan();
 
   const sessionRecords = scan.records.filter((r) => r.sessionId === sessionId);
@@ -104,7 +106,7 @@ export default async function SessionDetailPage({
         <KpiCard label={t('session.kpi.totalTokens')} value={formatTokensCompact(session.totalTokens, locale)} />
         <KpiCard
           label={t('session.kpi.cost')}
-          value={formatUSD(session.cost)}
+          value={formatCurrency(session.cost, currency)}
           warning={unpricedRequests > 0 ? t('common.unpricedCalls', { count: unpricedRequests }) : undefined}
         />
         <KpiCard label={t('session.kpi.duration')} value={formatDuration(session.durationMs)} />
@@ -125,7 +127,7 @@ export default async function SessionDetailPage({
                   tokens: formatTokensCompact(mb.tokens, locale),
                 })}
               </span>
-              <span className="num-mono text-text-primary font-medium">{formatUSD(mb.cost)}</span>
+              <span className="num-mono text-text-primary font-medium">{formatCurrency(mb.cost, currency)}</span>
             </div>
           ))}
         </div>
@@ -143,7 +145,7 @@ export default async function SessionDetailPage({
                   #{i + 1} · {shorten(m.model)} · {formatDateTime(m.timestamp)}{' '}
                   <span className="text-text-tertiary">({formatRelative(m.timestamp, locale)})</span>
                 </span>
-                <span className="num-mono text-text-primary font-medium">{formatUSD(m.cost)}</span>
+                <span className="num-mono text-text-primary font-medium">{formatCurrency(m.cost, currency)}</span>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs num-mono mt-2">
                 <div>

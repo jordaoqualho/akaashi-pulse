@@ -5,9 +5,10 @@ import { Section } from '@/components/section';
 import { TokenStackChart, type TokenStackDatum } from '@/components/charts/token-stack-chart';
 import { ConversationsBarChart } from '@/components/charts/conversations-bar-chart';
 import { useI18n, useT } from '@/lib/i18n/context';
-import { formatTokensCompact, formatUSD } from '@/lib/utils';
+import { formatTokensCompact, formatCurrency } from '@/lib/utils';
 import { useTabIndicator } from '@/components/use-tab-indicator';
 import { TabIndicator } from '@/components/tab-indicator';
+import { useCurrency } from '@/lib/currency/context';
 
 type Metric = 'tokens' | 'conversations';
 
@@ -20,6 +21,7 @@ interface Props {
 export function OverviewTrendCard({ data, activeDaysHint }: Props) {
   const t = useT();
   const { locale } = useI18n();
+  const { currency } = useCurrency();
   const [metric, setMetric] = useState<Metric>('tokens');
   const metricLabel = t(
     metric === 'tokens' ? 'overview.trend.desc.tokens' : 'overview.trend.desc.conversations',
@@ -66,7 +68,7 @@ export function OverviewTrendCard({ data, activeDaysHint }: Props) {
             value={formatPrimary(primaryTotal / activeDays)}
           />
           <TrendStat label={t('overview.trend.summary.peak')} value={formatPrimary(peak.value)} hint={peak.label} />
-          <TrendStat label={t('overview.trend.summary.spend')} value={formatUSD(totals.cost)} accent />
+          <TrendStat label={t('overview.trend.summary.spend')} value={formatCurrency(totals.cost, currency)} accent />
         </div>
         <div className="min-w-0 rounded-card border border-border bg-bg-surface-hi/30 px-2 pt-3 sm:px-3">
           {metric === 'tokens' ? <TokenStackChart data={data} /> : <ConversationsBarChart data={data} />}

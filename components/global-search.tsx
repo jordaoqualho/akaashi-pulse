@@ -5,12 +5,20 @@ import {
   ArrowRight,
   BarChart3,
   Bot,
+  Calculator,
   Clock3,
   Command,
+  Database,
+  DollarSign,
+  FolderTree,
   FolderKanban,
   Gauge,
+  KeyRound,
   LayoutDashboard,
+  Lightbulb,
   ListTree,
+  Plug,
+  RefreshCw,
   Search,
   Settings,
   X,
@@ -19,25 +27,39 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useT } from '@/lib/i18n/context';
+import { requestRefresh } from '@/components/refresh-controller';
 
 interface SearchItem {
+  id: string;
   href: string;
   icon: LucideIcon;
   labelKey: string;
   detailKey: string;
   keywords: string[];
+  action?: 'refresh';
 }
 
 const SEARCH_ITEMS: SearchItem[] = [
-  { href: '/', icon: LayoutDashboard, labelKey: 'nav.overview', detailKey: 'nav.search.detail.overview', keywords: ['home', 'dashboard', 'summary'] },
-  { href: '/usage', icon: Gauge, labelKey: 'nav.usage', detailKey: 'nav.search.detail.usage', keywords: ['tokens', 'cost', 'calls', 'table'] },
-  { href: '/limits', icon: Clock3, labelKey: 'nav.limits', detailKey: 'nav.search.detail.limits', keywords: ['quota', 'reset', 'rate', 'agent'] },
-  { href: '/sessions', icon: Activity, labelKey: 'nav.sessions', detailKey: 'nav.search.detail.sessions', keywords: ['conversation', 'turns', 'activity'] },
-  { href: '/projects', icon: FolderKanban, labelKey: 'nav.projects', detailKey: 'nav.search.detail.projects', keywords: ['spend', 'time', 'workspace'] },
-  { href: '/models', icon: Bot, labelKey: 'nav.models', detailKey: 'nav.search.detail.models', keywords: ['pricing', 'provider', 'model'] },
-  { href: '/tools', icon: ListTree, labelKey: 'nav.tools', detailKey: 'nav.search.detail.tools', keywords: ['skills', 'mcp', 'context'] },
-  { href: '/benchmark', icon: BarChart3, labelKey: 'nav.benchmark', detailKey: 'nav.search.detail.benchmark', keywords: ['benchmark', 'compare', 'decision', 'efficiency'] },
-  { href: '/settings', icon: Settings, labelKey: 'nav.settings', detailKey: 'nav.search.detail.settings', keywords: ['sources', 'pricing', 'cache', 'mcp'] },
+  { id: 'overview', href: '/', icon: LayoutDashboard, labelKey: 'nav.overview', detailKey: 'nav.search.detail.overview', keywords: ['home', 'dashboard', 'summary'] },
+  { id: 'usage', href: '/usage', icon: Gauge, labelKey: 'nav.usage', detailKey: 'nav.search.detail.usage', keywords: ['tokens', 'cost', 'calls', 'table'] },
+  { id: 'limits', href: '/limits', icon: Clock3, labelKey: 'nav.limits', detailKey: 'nav.search.detail.limits', keywords: ['quota', 'reset', 'rate', 'agent'] },
+  { id: 'sessions', href: '/sessions', icon: Activity, labelKey: 'nav.sessions', detailKey: 'nav.search.detail.sessions', keywords: ['conversation', 'turns', 'activity'] },
+  { id: 'projects', href: '/projects', icon: FolderKanban, labelKey: 'nav.projects', detailKey: 'nav.search.detail.projects', keywords: ['spend', 'time', 'workspace'] },
+  { id: 'models', href: '/models', icon: Bot, labelKey: 'nav.models', detailKey: 'nav.search.detail.models', keywords: ['pricing', 'provider', 'model'] },
+  { id: 'tools', href: '/tools', icon: ListTree, labelKey: 'nav.tools', detailKey: 'nav.search.detail.tools', keywords: ['skills', 'mcp', 'context'] },
+  { id: 'insights', href: '/insights', icon: Lightbulb, labelKey: 'nav.insights', detailKey: 'nav.search.detail.insights', keywords: ['sessions', 'patterns', 'activity', 'cost', 'trends', 'insights'] },
+  { id: 'benchmark', href: '/benchmark', icon: BarChart3, labelKey: 'nav.benchmark', detailKey: 'nav.search.detail.benchmark', keywords: ['benchmark', 'compare', 'decision', 'efficiency'] },
+  { id: 'settings', href: '/settings', icon: Settings, labelKey: 'nav.settings', detailKey: 'nav.search.detail.settings', keywords: ['sources', 'pricing', 'cache', 'mcp', 'preferences', 'configurações', 'ajustes'] },
+  { id: 'data-sources', href: '/settings?tab=providers', icon: Database, labelKey: 'nav.search.dataSources', detailKey: 'nav.search.detail.dataSources', keywords: ['directories', 'folders', 'jsonl', 'claude', 'codex', 'fontes', 'diretórios', 'pastas'] },
+  { id: 'project-scope', href: '/settings?tab=providers', icon: FolderTree, labelKey: 'nav.search.projectScope', detailKey: 'nav.search.detail.projectScope', keywords: ['workspaces', 'roots', 'projects', 'folders', 'scope', 'escopo', 'projetos'] },
+  { id: 'external-agents', href: '/settings?tab=providers', icon: Bot, labelKey: 'nav.search.externalAgents', detailKey: 'nav.search.detail.externalAgents', keywords: ['cursor', 'antigravity', 'external', 'agent', 'logs', 'agentes externos', 'registros'] },
+  { id: 'analytics', href: '/settings?tab=analytics', icon: Activity, labelKey: 'nav.search.analytics', detailKey: 'nav.search.detail.analytics', keywords: ['indexer', 'cache', 'scan', 'diagnostics', 'files', 'análise', 'analíticos', 'indexação'] },
+  { id: 'real-costs', href: '/settings?tab=costs', icon: Calculator, labelKey: 'nav.search.realCosts', detailKey: 'nav.search.detail.realCosts', keywords: ['subscription', 'plans', 'monthly', 'operating', 'allocation', 'custos', 'assinatura', 'planos', 'mensal'] },
+  { id: 'mcp', href: '/settings?tab=mcp', icon: Plug, labelKey: 'nav.search.mcp', detailKey: 'nav.search.detail.mcp', keywords: ['read-only', 'chatgpt', 'connection', 'local', 'server', 'somente leitura', 'conexão', 'servidor'] },
+  { id: 'pricing', href: '/settings?tab=pricing', icon: DollarSign, labelKey: 'nav.search.pricing', detailKey: 'nav.search.detail.pricing', keywords: ['prices', 'models', 'litellm', 'refresh', 'preços', 'modelos', 'valores'] },
+  { id: 'local-service', href: '/settings?tab=general', icon: RefreshCw, labelKey: 'nav.search.localService', detailKey: 'nav.search.detail.localService', keywords: ['background', 'server', '3737', 'launchagent', 'terminal', 'serviço', 'servidor local', 'segundo plano'] },
+  { id: 'akaashi-os', href: '/settings/akaashi-os', icon: KeyRound, labelKey: 'nav.search.akaashiOs', detailKey: 'nav.search.detail.akaashiOs', keywords: ['integration', 'sync', 'connect', 'payload', 'integração', 'sincronização', 'conectar'] },
+  { id: 'refresh', href: '/', icon: RefreshCw, labelKey: 'nav.search.refresh', detailKey: 'nav.search.detail.refresh', keywords: ['reload', 'reindex', 'rescan', 'update', 'atualizar', 'reindexar', 'varrer'], action: 'refresh' },
 ];
 
 export function GlobalSearch() {
@@ -88,6 +110,7 @@ export function GlobalSearch() {
     });
     if (needle && matches.length === 0) {
       return [{
+        id: 'usage-fallback',
         href: `/usage?q=${encodeURIComponent(query.trim())}`,
         icon: Search,
         labelKey: 'nav.search.usageFallback',
@@ -105,6 +128,10 @@ export function GlobalSearch() {
   function navigateTo(item: SearchItem) {
     setOpen(false);
     setQuery('');
+    if (item.action === 'refresh') {
+      requestRefresh('manual');
+      return;
+    }
     router.push(item.href);
   }
 
@@ -185,7 +212,7 @@ export function GlobalSearch() {
                 const active = activeIndex === index;
                 return (
                   <button
-                    key={item.href}
+                    key={item.id}
                     id={`global-search-result-${index}`}
                     type="button"
                     role="option"

@@ -4,8 +4,9 @@ import { aggregateByModel } from '@/lib/aggregator';
 import { KpiCard } from '@/components/kpi-card';
 import { EmptyState, PageShell, Section } from '@/components/section';
 import { ModelBenchmarkTable, type BenchmarkRow } from '@/components/model-benchmark-table';
-import { formatTokensCompact, formatUSD, formatUSDPrecise } from '@/lib/utils';
+import { formatTokensCompact, formatCurrency, formatCurrencyPrecise } from '@/lib/utils';
 import { getServerLocale, getServerT } from '@/lib/i18n/server';
+import { getServerCurrency } from '@/lib/currency/server';
 import { expandSources, filterBySource, resolveSource } from '@/lib/source';
 import { getProvider } from '@/lib/providers';
 
@@ -21,6 +22,7 @@ export default async function BenchmarkPage({
   const source = await resolveSource(sp.source);
   const t = await getServerT();
   const locale = await getServerLocale();
+  const currency = await getServerCurrency();
   const scan = await getCachedScan();
   const records = filterBySource(scan.records, source);
   const sources = expandSources(source);
@@ -74,7 +76,7 @@ export default async function BenchmarkPage({
         <KpiCard label={t('benchmark.kpi.models')} value={rows.length.toLocaleString()} hint={t('benchmark.kpi.modelsHint')} />
         <KpiCard label={t('benchmark.kpi.requests')} value={totalRequests.toLocaleString()} hint={t('benchmark.kpi.requestsHint')} accent="brand" />
         <KpiCard label={t('benchmark.kpi.tokens')} value={formatTokensCompact(totalTokens, locale)} hint={t('benchmark.kpi.tokensHint')} accent="success" />
-        <KpiCard label={t('benchmark.kpi.cost')} value={formatUSD(totalCost)} hint={t('benchmark.kpi.costHint')} accent="warning" />
+        <KpiCard label={t('benchmark.kpi.cost')} value={formatCurrency(totalCost, currency)} hint={t('benchmark.kpi.costHint')} accent="warning" />
       </div>
 
       <Section title={t('benchmark.decisions.title')} desc={t('benchmark.decisions.desc')}>
@@ -83,7 +85,7 @@ export default async function BenchmarkPage({
             title={t('benchmark.decision.costTitle')}
             desc={t('benchmark.decision.costDesc')}
             row={lowestCost}
-            value={lowestCost?.costPerMillion == null ? '—' : formatUSDPrecise(lowestCost.costPerMillion)}
+            value={lowestCost?.costPerMillion == null ? '—' : formatCurrencyPrecise(lowestCost.costPerMillion, currency)}
             valueLabel={t('benchmark.decision.perMillion')}
             empty={t('benchmark.decision.noPricedData')}
             tone="brand"
@@ -110,27 +112,27 @@ export default async function BenchmarkPage({
         <p className="mt-4 text-xs leading-relaxed text-text-tertiary">{t('benchmark.decisions.note')}</p>
       </Section>
 
-      <Section title={t('benchmark.table.title')} desc={t('benchmark.table.desc')}>
-        <ModelBenchmarkTable
-          rows={rows}
-          locale={locale}
-          labels={{
-            searchPlaceholder: t('benchmark.table.search'),
-            allProviders: t('benchmark.table.allProviders'),
-            noMatches: t('benchmark.table.noMatches'),
-            modelsCount: t('benchmark.table.modelsCount'),
-            model: t('benchmark.table.model'),
-            activity: t('benchmark.table.activity'),
-            cost: t('benchmark.table.cost'),
-            observedCost: t('benchmark.table.observedCost'),
-            cache: t('benchmark.table.cache'),
-            rates: t('benchmark.table.rates'),
-            requests: t('benchmark.table.requests'),
-            tokens: t('benchmark.table.tokens'),
-            sortBy: t('benchmark.table.sortBy'),
-          }}
-        />
-      </Section>
+      <ModelBenchmarkTable
+        rows={rows}
+        locale={locale}
+        labels={{
+          title: t('benchmark.table.title'),
+          description: t('benchmark.table.desc'),
+          searchPlaceholder: t('benchmark.table.search'),
+          allProviders: t('benchmark.table.allProviders'),
+          noMatches: t('benchmark.table.noMatches'),
+          modelsCount: t('benchmark.table.modelsCount'),
+          model: t('benchmark.table.model'),
+          activity: t('benchmark.table.activity'),
+          cost: t('benchmark.table.cost'),
+          observedCost: t('benchmark.table.observedCost'),
+          cache: t('benchmark.table.cache'),
+          rates: t('benchmark.table.rates'),
+          requests: t('benchmark.table.requests'),
+          tokens: t('benchmark.table.tokens'),
+          sortBy: t('benchmark.table.sortBy'),
+        }}
+      />
 
       <Section title={t('benchmark.reference.title')} desc={t('benchmark.reference.desc')}>
         <div className="flex flex-col gap-4 rounded-button border border-border bg-bg-surface-hi/40 p-4 sm:flex-row sm:items-start sm:justify-between">

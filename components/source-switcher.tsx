@@ -110,15 +110,16 @@ export function SourceSwitcher({ available, initial, providers, className, onSel
               type="button"
               onClick={() => select(p.id)}
               aria-pressed={isActive}
+              aria-label={label}
+              title={label}
               disabled={pending}
-              className={`px-2.5 h-6 text-xs font-medium inline-flex items-center gap-1.5 rounded transition-colors ${
+              className={`inline-flex h-7 w-7 items-center justify-center rounded transition-colors ${
                 isActive
                   ? 'bg-brand-strong text-white shadow-sm'
                   : 'text-text-tertiary hover:text-text-primary hover:bg-bg-surface-hi'
               }`}
             >
-              <ProviderMark provider={p} />
-              <span>{label}</span>
+              <ProviderMark provider={p} active={isActive} />
             </button>
           );
         })}
@@ -133,7 +134,7 @@ export function SourceSwitcher({ available, initial, providers, className, onSel
   );
 }
 
-function ProviderMark({ provider }: { provider: SourceSwitcherProviderInfo }) {
+function ProviderMark({ provider, active = false }: { provider: SourceSwitcherProviderInfo; active?: boolean }) {
   if (provider.logoSrc) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
@@ -141,7 +142,7 @@ function ProviderMark({ provider }: { provider: SourceSwitcherProviderInfo }) {
         src={provider.logoSrc}
         alt=""
         aria-hidden
-        className="w-4 h-4 rounded-[3px] object-contain shrink-0"
+        className={`h-[18px] w-[18px] shrink-0 rounded-[3px] object-contain ${active && provider.id === 'cursor' ? 'brightness-0 invert' : ''}`}
       />
     );
   }
@@ -174,7 +175,9 @@ function AllButton({
       onClick={onSelect}
       aria-pressed={active}
       disabled={disabled}
-      className={`px-2.5 h-6 text-xs font-medium inline-flex items-center gap-1.5 rounded transition-colors ${
+      aria-label={label}
+      title={label}
+      className={`inline-flex h-7 w-8 items-center justify-center rounded transition-colors ${
         active
           ? 'bg-brand-strong text-white shadow-sm'
           : 'text-text-tertiary hover:text-text-primary hover:bg-bg-surface-hi'
@@ -194,7 +197,7 @@ function AllButton({
                 key={p.id}
                 src={p.logoSrc}
                 alt=""
-                className="absolute w-4 h-4 rounded-[3px] object-contain"
+                className={`absolute h-[18px] w-[18px] rounded-[3px] object-contain ${active && p.id === 'cursor' ? 'brightness-0 invert' : ''}`}
                 style={{ left, zIndex: providers.length - i }}
               />
             );
@@ -215,7 +218,6 @@ function AllButton({
           );
         })}
       </span>
-      <span>{label}</span>
     </button>
   );
 }

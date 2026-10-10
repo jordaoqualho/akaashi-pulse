@@ -190,6 +190,47 @@ body { min-height: 100dvh; font-size: 14px; line-height: 1.5; }
   .field { @apply w-full rounded-button border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary; min-height: 36px; }
   .field:hover { border-color: var(--input); }
   .field:focus { outline: none; border-color: var(--ink); box-shadow: var(--ring); }
+  .cost-ledger-input {
+    @apply w-full rounded-button border border-white/15 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/45;
+    min-height: 36px;
+  }
+  .cost-ledger-input:hover { @apply border-white/30 bg-white/15; }
+  .cost-ledger-input:focus { outline: none; @apply border-white/50 bg-white/15; box-shadow: 0 0 0 3px rgb(255 255 255 / 0.12); }
+  .cost-ledger-input option { color: var(--ink); background: var(--surface); }
+  .cost-select { @apply relative min-w-0; }
+  .cost-select-trigger {
+    @apply flex min-h-[36px] w-full items-center justify-between gap-3 rounded-button border border-border bg-bg-surface px-3 py-2 text-left text-sm text-text-primary transition-colors;
+  }
+  .cost-select-trigger:hover { border-color: var(--input); @apply bg-wash; }
+  .cost-select-trigger:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; box-shadow: var(--ring); }
+  .cost-select-trigger:disabled { @apply cursor-not-allowed opacity-60; }
+  .cost-select-trigger.is-dark { @apply border-white/15 bg-white/10 text-white; }
+  .cost-select-trigger.is-dark:hover { @apply border-white/30 bg-white/15; }
+  .cost-select-trigger.is-dark:focus-visible { outline-color: white; box-shadow: 0 0 0 3px rgb(255 255 255 / 0.12); }
+  .cost-select-menu {
+    @apply absolute left-0 right-0 z-50 mt-1 max-h-64 overflow-auto rounded-card border border-border bg-bg-surface p-1;
+    box-shadow: var(--shadow-pop);
+  }
+  .cost-select-menu.is-dark { @apply border-white/15 bg-brand-strong; }
+  .cost-select-option { @apply flex w-full items-center justify-between gap-3 rounded-button px-3 py-2 text-left text-sm text-text-secondary transition-colors; }
+  .cost-select-option:hover, .cost-select-option[aria-selected='true'] { @apply bg-wash text-text-primary; }
+  .cost-select-menu.is-dark .cost-select-option { @apply text-white/70; }
+  .cost-select-menu.is-dark .cost-select-option:hover, .cost-select-menu.is-dark .cost-select-option[aria-selected='true'] { @apply bg-white/10 text-white; }
+  .cost-select-meta { @apply text-xs text-text-tertiary; }
+  .cost-select-menu.is-dark .cost-select-meta { @apply text-white/45; }
+  .cost-save-badge { @apply inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-2 py-1 text-[10px] font-medium normal-case tracking-normal text-white/70; }
+  .cost-save-dot { @apply h-1.5 w-1.5 rounded-full bg-success; box-shadow: 0 0 0 3px rgb(23 102 58 / 0.2); }
+  .cost-save-dot.is-error { @apply bg-danger; box-shadow: 0 0 0 3px rgb(163 45 45 / 0.2); }
+  .cost-save-retry { @apply rounded px-1 text-white underline decoration-white/40 underline-offset-2 transition-colors hover:text-white; }
+  .cost-ledger-provider {
+    @apply flex items-center justify-between gap-3 rounded-button px-3 py-3 transition-colors;
+  }
+  .cost-ledger-provider:hover { @apply bg-wash; }
+  .cost-ledger-provider[aria-pressed='true'] { @apply bg-brand-strong text-white; }
+  .cost-ledger-provider[aria-pressed='true'] .text-text-primary { color: white; }
+  .cost-ledger-provider[aria-pressed='true'] .text-text-tertiary { color: rgb(255 255 255 / 0.62); }
+  .cost-ledger-status { @apply h-2 w-2 shrink-0 rounded-full bg-border; }
+  .cost-ledger-status.is-on { @apply bg-success; box-shadow: 0 0 0 3px rgb(23 102 58 / 0.12); }
   .row-link { @apply transition-colors; }
   .row-link:hover { background: var(--wash); }
   .late, .delta-down { color: var(--red-text); }

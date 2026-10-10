@@ -7,18 +7,20 @@ import { KpiCard } from '@/components/kpi-card';
 import { TokenStackChart, type TokenStackDatum } from '@/components/charts/token-stack-chart';
 import {
   formatTokensCompact,
-  formatUSD,
+  formatCurrency,
   formatRelative,
   formatDuration,
   projectNameFromCwd,
   shortHash,
 } from '@/lib/utils';
 import { getServerT, getServerLocale } from '@/lib/i18n/server';
+import { getServerCurrency } from '@/lib/currency/server';
 import { resolveSource, filterBySource, expandSources } from '@/lib/source';
 import { combineTimeBuckets, combineTotals } from '@/lib/source-merge';
 import { getProvider } from '@/lib/providers';
 import { costOfRecord } from '@/lib/pricing/calculate';
 import { resolveCanonicalCwd, resolveProjectRootCwd } from '@/lib/project-label';
+import { ClickableTableRow } from '@/components/clickable-table-row';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -38,6 +40,7 @@ export default async function ProjectDetailPage({
   const canonicalCwd = resolveProjectRootCwd(cwd);
   const t = await getServerT();
   const locale = await getServerLocale();
+  const currency = await getServerCurrency();
   const scan = await getCachedScan();
   const sources = expandSources(source);
 
@@ -114,8 +117,8 @@ export default async function ProjectDetailPage({
         <KpiCard label={t('usage.kpi.totalTokens')} value={formatTokensCompact(totals.totalTokens, locale)} />
         <KpiCard
           label={t('usage.kpi.totalCost')}
-          value={formatUSD(totals.cost)}
-          hint={t('common.savedViaCache', { amount: formatUSD(totals.saved) })}
+          value={formatCurrency(totals.cost, currency)}
+          hint={t('common.savedViaCache', { amount: formatCurrency(totals.saved, currency) })}
           warning={
             totals.unpricedRequests > 0
               ? t('common.unpricedCalls', { count: totals.unpricedRequests })
@@ -150,7 +153,7 @@ export default async function ProjectDetailPage({
                     </div>
                     <div>
                       <div className="text-text-tertiary">{t('projects.stat.cost')}</div>
-                      <div className="num-mono mt-0.5 text-text-primary">{formatUSD(folder.cost)}</div>
+                      <div className="num-mono mt-0.5 text-text-primary">{formatCurrency(folder.cost, currency)}</div>
                     </div>
                     <div>
                       <div className="text-text-tertiary">{t('projects.stat.tokens')}</div>
@@ -185,7 +188,12 @@ export default async function ProjectDetailPage({
               </thead>
               <tbody>
                 {sessions.map((s) => (
-                  <tr key={s.sessionId} className="border-b border-border last:border-b-0 hover:bg-bg-surface-hi/40">
+                  <ClickableTableRow
+                    key={s.sessionId}
+                    href={`/sessions/${encodeURIComponent(s.sessionId)}?source=${s.source}`}
+                    ariaLabel={s.title || t('sessions.untitled', { hash: shortHash(s.sessionId) })}
+                    className="border-b border-border last:border-b-0 hover:bg-bg-surface-hi/40"
+                  >
                     <td className="px-3 py-2.5">
                       <Link href={`/sessions/${encodeURIComponent(s.sessionId)}?source=${s.source}`} className="hover:text-brand">
                         <div className="font-medium truncate max-w-[280px]">
@@ -199,14 +207,14 @@ export default async function ProjectDetailPage({
                     </td>
                     <td className="px-3 py-2.5 num-mono text-right">{s.requests}</td>
                     <td className="px-3 py-2.5 num-mono text-right">{formatTokensCompact(s.totalTokens, locale)}</td>
-                    <td className="px-3 py-2.5 num-mono text-right font-medium">{formatUSD(s.cost)}</td>
+                    <td className="px-3 py-2.5 num-mono text-right font-medium">{formatCurrency(s.cost, currency)}</td>
                     <td className="px-3 py-2.5 num-mono text-right text-text-tertiary">
                       {formatDuration(s.durationMs)}
                     </td>
                     <td className="px-3 py-2.5 num-mono text-right text-xs text-text-tertiary whitespace-nowrap">
                       {formatRelative(s.endTime, locale)}
                     </td>
-                  </tr>
+                  </ClickableTableRow>
                 ))}
               </tbody>
             </table>

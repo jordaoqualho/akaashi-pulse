@@ -1,8 +1,9 @@
 'use client';
 
-import { formatUSD, formatPct, formatTokensCompact, shortenModel } from '@/lib/utils';
+import { formatCurrency, formatPct, formatTokensCompact, shortenModel } from '@/lib/utils';
 import type { ModelSummary } from '@/lib/types';
 import { useT, useI18n } from '@/lib/i18n/context';
+import { useCurrency } from '@/lib/currency/context';
 
 const MODEL_COLORS: Record<string, string> = {
   opus: 'rgb(var(--chart-output))',
@@ -20,6 +21,7 @@ function colorFor(model: string): string {
 export function ModelBarChart({ models }: { models: ModelSummary[] }) {
   const t = useT();
   const { locale } = useI18n();
+  const { currency } = useCurrency();
   if (!models.length) {
     return <div className="text-sm text-text-tertiary">{t('chart.empty')}</div>;
   }
@@ -35,7 +37,7 @@ export function ModelBarChart({ models }: { models: ModelSummary[] }) {
             className="group space-y-1.5 rounded-button px-2 py-1.5 -mx-2 transition-colors hover:bg-bg-surface-hi/45 focus-visible:bg-bg-surface-hi/45"
             tabIndex={0}
             role="group"
-            aria-label={`${shortenModel(m.model)}: ${formatUSD(m.cost)}, ${formatTokensCompact(m.totalTokens, locale)}, ${formatPct(pct)}`}
+            aria-label={`${shortenModel(m.model)}: ${formatCurrency(m.cost, currency)}, ${formatTokensCompact(m.totalTokens, locale)}, ${formatPct(pct)}`}
           >
             <div className="flex items-baseline justify-between gap-3 text-sm">
               <span className="font-medium text-text-primary truncate">{shortenModel(m.model)}</span>
@@ -43,7 +45,7 @@ export function ModelBarChart({ models }: { models: ModelSummary[] }) {
                 {formatTokensCompact(m.totalTokens, locale)} · {formatPct(pct)}
               </span>
               <span className="num-mono font-medium text-text-primary min-w-[80px] text-right">
-                {formatUSD(m.cost)}
+                {formatCurrency(m.cost, currency)}
               </span>
             </div>
             <div className="h-2 w-full bg-bg-surface-hi rounded-full overflow-hidden">

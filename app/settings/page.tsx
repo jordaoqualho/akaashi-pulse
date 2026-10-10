@@ -13,6 +13,7 @@ import { SettingsNav, type SettingsTab } from '@/components/settings-nav';
 import { SourceDirectoryManager } from '@/components/source-directory-manager';
 import { ProjectScopeManager } from '@/components/project-scope-manager';
 import { ExternalAgentSources } from '@/components/external-agent-sources';
+import { OperatingCostSettings } from '@/components/operating-cost-settings';
 import { getConfiguredSourceDirs } from '@/lib/data-sources/config';
 import { discoverExternalAgents } from '@/lib/data-sources/discovery';
 import { getProjectRoots, projectScopeIsAutomatic } from '@/lib/project-scope';
@@ -380,6 +381,16 @@ export default async function SettingsPage({
             </Section>
           )}
 
+          {tab === 'costs' && (
+            <Section title={t('settings.operatingCost.title')} desc={t('settings.operatingCost.desc')}>
+              <OperatingCostSettings providers={providers.map((provider) => ({
+                id: provider.id,
+                displayName: provider.displayName,
+                logoSrc: provider.logoSrc,
+              }))} />
+            </Section>
+          )}
+
           {tab === 'pricing' && (
             <>
               {providers.map((provider) => {
@@ -405,7 +416,7 @@ export default async function SettingsPage({
 }
 
 function normalizeSettingsTab(value: string | undefined): SettingsTab {
-  if (value === 'providers' || value === 'analytics' || value === 'mcp' || value === 'pricing') return value;
+  if (value === 'providers' || value === 'analytics' || value === 'costs' || value === 'mcp' || value === 'pricing') return value;
   return 'general';
 }
 

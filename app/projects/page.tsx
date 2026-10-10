@@ -6,16 +6,21 @@ import { KpiCard } from '@/components/kpi-card';
 import { ProjectSpendChart, type ProjectSpendDatum } from '@/components/charts/project-spend-chart';
 import {
   formatTokensCompact,
-  formatUSD,
+  formatCurrency,
   formatDuration,
   formatRelative,
   projectNameFromCwd,
 } from '@/lib/utils';
 import { getServerT, getServerLocale } from '@/lib/i18n/server';
+import { getServerCurrency } from '@/lib/currency/server';
 import { resolveSource, filterBySource, expandSources } from '@/lib/source';
 import { getProvider } from '@/lib/providers';
 import { resolveProjectRootCwd } from '@/lib/project-label';
 import type { AssistantRecord, ProjectSummary } from '@/lib/types';
+import { getOperatingCostConfig } from '@/lib/data-sources/config';
+import { calculateOperatingCostReport } from '@/lib/operating-cost';
+import { ClickableTableRow } from '@/components/clickable-table-row';
+import type { DisplayCurrency } from '@/lib/currency';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -81,6 +86,7 @@ export default async function ProjectsPage({
   const source = await resolveSource(sp.source);
   const t = await getServerT();
   const locale = await getServerLocale();
+  const currency = await getServerCurrency();
   const scan = await getCachedScan();
   const records = filterBySource(scan.records, source);
   const sources = expandSources(source);
@@ -106,12 +112,28 @@ export default async function ProjectsPage({
       durations.set(key, (durations.get(key) ?? 0) + session.durationMs);
     }
   }
+  const operatingCost = calculateOperatingCostReport({
+    records: scan.records,
+    userRecords: scan.userRecords,
+    source,
+    config: getOperatingCostConfig(),
+  });
+  const actualCostByProject = new Map<string, number>();
+  for (const row of operatingCost.rows) {
+    for (const provider of row.providers) {
+      actualCostByProject.set(`${provider.source}::${row.cwd}`, provider.actualCost);
+    }
+  }
   const projectRows: ProjectSpendDatum[] = projects.map((project) => ({
     name: project.projectName,
     cost: project.cost,
     durationMs: durations.get(durationKey(project.source, project.cwd)) ?? 0,
     sessions: project.sessions,
     requests: project.requests,
+    actualCost: operatingCost.hasConfiguredPlans
+      ? actualCostByProject.get(`${project.source}::${project.cwd}`) ?? 0
+      : undefined,
+    href: `/projects/${encodeURIComponent(project.cwd)}?source=${project.source}`,
   }));
   const totalDuration = projectRows.reduce((sum, project) => sum + project.durationMs, 0);
   const costPerHour = totalDuration > 0 ? totalCost / (totalDuration / 3_600_000) : 0;
@@ -123,11 +145,11 @@ export default async function ProjectsPage({
     <PageShell title={t('projects.title')} desc={t('projects.subtitle', { count: projects.length })}>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <KpiCard label={t('projects.summary.projects')} value={String(projects.length)} />
-        <KpiCard label={t('projects.summary.spend')} value={formatUSD(totalCost)} accent="brand" />
+          <KpiCard label={t('projects.summary.spend')} value={formatCurrency(totalCost, currency)} accent="brand" />
         <KpiCard label={t('projects.summary.time')} value={formatDuration(totalDuration)} accent="success" />
         <KpiCard
           label={t('projects.summary.rate')}
-          value={totalDuration > 0 ? `${formatUSD(costPerHour, { minFrac: 3, maxFrac: 3 })}/h` : '—'}
+          value={totalDuration > 0 ? `${formatCurrency(costPerHour, currency, { minFrac: 3, maxFrac: 3 })}/h` : '—'}
           hint={t('projects.summary.rateHint')}
           accent="warning"
         />
@@ -136,14 +158,87 @@ export default async function ProjectsPage({
       <Section title={t('projects.summary.title')} desc={t('projects.summary.desc')}>
         <ProjectSpendChart
           data={projectRows}
-          costTitle={t('overview.projects.cost')}
+          costTitle={t('projects.summary.estimated')}
           timeTitle={t('overview.projects.time')}
           rateLabel={t('overview.projects.rate')}
           emptyLabel={t('overview.projects.empty')}
           sessionsLabel={t('projects.stat.sessions')}
           requestsLabel={t('projects.stat.requests')}
+          actualCostTitle={t('projects.summary.real', { month: operatingCost.month })}
+          actualCostTotal={operatingCost.hasConfiguredPlans ? operatingCost.actualTotal : undefined}
+          actualCostCurrency={currency}
+          actualCostUnavailableLabel={operatingCost.hasConfiguredPlans
+            ? t('projects.summary.noCurrentAllocation')
+            : t('projects.summary.realUnavailable')}
+          actualShareLabel={t('projects.summary.realShare')}
           maxRows={8}
         />
+      </Section>
+
+      <Section
+        title={t('projects.realCost.title')}
+        desc={t('projects.realCost.desc', { month: operatingCost.month })}
+        right={<Link href="/settings?tab=costs" className="btn btn-line btn-sm">{t('projects.realCost.configure')}</Link>}
+      >
+        {!operatingCost.hasConfiguredPlans ? (
+          <div className="rounded-button border border-dashed border-border-hi bg-bg-surface-hi/30 px-4 py-5 text-sm text-text-secondary">
+            {t('projects.realCost.empty')}
+          </div>
+        ) : (
+          <>
+            <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <Stat label={t('projects.realCost.estimated')} value={formatCurrency(operatingCost.estimatedTotal, currency)} />
+              <Stat label={t('projects.realCost.allocated')} value={formatCurrency(operatingCost.actualTotal, currency)} />
+              <Stat label={t('projects.realCost.monthlyPlans')} value={formatCurrency(operatingCost.configuredMonthlyCost, currency)} />
+              <Stat label={t('projects.realCost.basis')} value={operatingCostBasisLabel(operatingCost.basis, t)} />
+            </div>
+            <div className="overflow-x-auto rounded-button border border-border">
+              <table className="w-full min-w-[680px] text-left text-sm">
+                <thead className="border-b border-border bg-bg-surface-hi/50 text-xs text-text-tertiary">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">{t('projects.realCost.project')}</th>
+                    <th className="px-4 py-3 text-right font-medium">{t('projects.realCost.metric')}</th>
+                    <th className="px-4 py-3 text-right font-medium">{t('projects.realCost.estimated')}</th>
+                    <th className="px-4 py-3 text-right font-medium">{t('projects.realCost.allocated')}</th>
+                    <th className="px-4 py-3 text-right font-medium">{t('projects.realCost.share')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {operatingCost.rows.map((row) => {
+                    const share = operatingCost.actualTotal > 0 ? row.actualCost / operatingCost.actualTotal : 0;
+                    return (
+                      <ClickableTableRow
+                        key={row.cwd}
+                        href={`/projects/${encodeURIComponent(row.cwd)}?source=${source}`}
+                        ariaLabel={row.projectName}
+                        className="text-text-secondary hover:bg-bg-surface-hi/40"
+                      >
+                        <td className="max-w-[260px] px-4 py-3">
+                          <Link href={`/projects/${encodeURIComponent(row.cwd)}?source=${source}`} className="font-medium text-text-primary hover:text-brand">
+                            {row.projectName}
+                          </Link>
+                          <div className="mt-0.5 truncate text-xs text-text-tertiary" title={row.cwd}>{row.cwd}</div>
+                        </td>
+                        <td className="px-4 py-3 text-right num-mono">{formatOperatingMetric(row, operatingCost.basis, locale, currency)}</td>
+                        <td className="px-4 py-3 text-right num-mono">{formatCurrency(row.estimatedCost, currency)}</td>
+                        <td className="px-4 py-3 text-right num-mono text-text-primary">{row.actualCost > 0 ? formatCurrency(row.actualCost, currency) : '—'}</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-bg-surface-hi">
+                              <div className="h-full rounded-full bg-brand" style={{ width: `${Math.min(100, share * 100)}%` }} />
+                            </div>
+                            <span className="num-mono text-xs">{(share * 100).toFixed(1)}%</span>
+                          </div>
+                        </td>
+                      </ClickableTableRow>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-3 text-xs leading-relaxed text-text-tertiary">{t('projects.realCost.hint')}</p>
+          </>
+        )}
       </Section>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -179,7 +274,7 @@ export default async function ProjectsPage({
                     {p.cwd}
                   </div>
                 </div>
-                <div className="num-mono text-text-primary text-right whitespace-nowrap">{formatUSD(p.cost)}</div>
+                <div className="num-mono text-text-primary text-right whitespace-nowrap">{formatCurrency(p.cost, currency)}</div>
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
@@ -198,7 +293,7 @@ export default async function ProjectsPage({
                   {t('common.lastActivity')} {formatRelative(p.lastActivity, locale)}
                 </span>
                 <span className="truncate text-right">
-                  {p.models.map(shortenFor(p)).join(', ')} · {projectRate > 0 ? `${formatUSD(projectRate, { minFrac: 3, maxFrac: 3 })}/h` : '—'}
+                  {p.models.map(shortenFor(p)).join(', ')} · {projectRate > 0 ? `${formatCurrency(projectRate, currency, { minFrac: 3, maxFrac: 3 })}/h` : '—'}
                 </span>
               </div>
             </Link>
@@ -216,4 +311,26 @@ function Stat({ label, value }: { label: string; value: number | string }) {
       <div className="num-mono text-text-primary mt-0.5">{value}</div>
     </div>
   );
+}
+
+function operatingCostBasisLabel(
+  basis: 'estimated-cost' | 'tokens' | 'requests' | 'tracked-time',
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string {
+  if (basis === 'tokens') return t('settings.operatingCost.basisTokens');
+  if (basis === 'requests') return t('settings.operatingCost.basisRequests');
+  if (basis === 'tracked-time') return t('settings.operatingCost.basisTime');
+  return t('settings.operatingCost.basisEstimated');
+}
+
+function formatOperatingMetric(
+  row: { metric: number; tokens: number; requests: number; durationMs: number },
+  basis: 'estimated-cost' | 'tokens' | 'requests' | 'tracked-time',
+  locale: 'en' | 'zh',
+  currency: DisplayCurrency,
+): string {
+  if (basis === 'tokens') return formatTokensCompact(row.tokens, locale);
+  if (basis === 'requests') return row.requests.toLocaleString();
+  if (basis === 'tracked-time') return formatDuration(row.durationMs);
+  return formatCurrency(row.metric, currency);
 }

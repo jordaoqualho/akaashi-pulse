@@ -11,6 +11,7 @@ import {
   FolderKanban,
   Gauge,
   KeyRound,
+  Lightbulb,
   LayoutDashboard,
   ListTree,
   Menu,
@@ -25,6 +26,7 @@ import { GlobalSearch } from '@/components/global-search';
 import { Logo } from '@/components/logo';
 import { requestRefresh, useRefreshState } from '@/components/refresh-controller';
 import { SourceSwitcher } from '@/components/source-switcher';
+import { CurrencySwitcher } from '@/components/currency-switcher';
 import type { SourceChoice, SourceSwitcherProps } from '@/components/source-switcher';
 import { useT } from '@/lib/i18n/context';
 interface NavItem {
@@ -53,7 +55,10 @@ const GROUPS: Array<{ labelKey: string; items: NavItem[] }> = [
   },
   {
     labelKey: 'nav.decide',
-    items: [{ href: '/benchmark', labelKey: 'nav.benchmark', icon: BarChart3 }],
+    items: [
+      { href: '/insights', labelKey: 'nav.insights', icon: Lightbulb },
+      { href: '/benchmark', labelKey: 'nav.benchmark', icon: BarChart3 },
+    ],
   },
   {
     labelKey: 'nav.system',
@@ -113,18 +118,23 @@ export function Nav({
       <aside className={cn('on-dark sticky top-0 flex h-dvh shrink-0 flex-col bg-side text-side-text transition-[width] duration-200 ease-out max-lg:hidden', collapsed ? 'w-[68px]' : 'w-[232px]')}>
         <div className={cn('flex h-16 shrink-0 items-center', collapsed ? 'justify-center' : 'justify-between pl-5 pr-3')}>
           {collapsed ? (
-            <Link href="/" className="group relative flex h-9 w-9 items-center justify-center rounded-md hover:bg-side-hover" aria-label="Overview">
-              <span className="title text-[22px] leading-none text-paper" aria-hidden>a</span>
-              <span className="absolute bottom-[10px] right-[9px] h-1.5 w-1.5 rounded-full bg-brand-red" aria-hidden />
-              <Tip>Overview</Tip>
-            </Link>
+            // One slot only: the brand mark turns into the expand control on
+            // hover/focus, so the toggle never wraps or jumps in the 68px rail.
+            <button type="button" onClick={toggle} className="group relative flex h-9 w-9 items-center justify-center rounded-md hover:bg-side-hover focus-visible:bg-side-hover" aria-label="Expand navigation" aria-keyshortcuts="[" aria-expanded={false}>
+              <span className="relative transition-opacity group-hover:opacity-0 group-focus-visible:opacity-0" aria-hidden>
+                <span className="title text-[22px] leading-none text-paper">a</span>
+                <span className="absolute -right-1.5 bottom-[3px] h-1.5 w-1.5 rounded-full bg-brand-red" />
+              </span>
+              <PanelLeftOpen size={17} strokeWidth={1.8} className="absolute text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden />
+              <Tip>Expand navigation  [</Tip>
+            </button>
           ) : (
             <>
               <Link href="/" className="text-paper" aria-label="AKAASHI Pulse overview">
                 <Logo className="text-[24px]" />
               </Link>
-              <button type="button" onClick={toggle} className="flex h-8 w-8 items-center justify-center rounded-md text-side-faint hover:bg-side-hover hover:text-white" aria-label="Collapse navigation" title="Collapse navigation [">
-                <PanelLeftClose size={17} strokeWidth={1.8} />
+              <button type="button" onClick={toggle} className="flex h-8 w-8 items-center justify-center rounded-md text-side-faint hover:bg-side-hover hover:text-white" aria-label="Collapse navigation" aria-keyshortcuts="[" aria-expanded title="Collapse navigation  [">
+                <PanelLeftClose size={17} strokeWidth={1.8} aria-hidden />
               </button>
             </>
           )}
@@ -155,15 +165,6 @@ export function Nav({
           ))}
         </nav>
 
-        {collapsed && (
-          <div className="flex justify-center pb-3">
-            <button type="button" onClick={toggle} className="group relative flex h-9 w-9 items-center justify-center rounded-md text-side-faint hover:bg-side-hover hover:text-white" aria-label="Expand navigation">
-              <PanelLeftOpen size={17} strokeWidth={1.8} />
-              <Tip>Expand navigation [</Tip>
-            </button>
-          </div>
-        )}
-
         {!collapsed && (
           <div className="border-t border-side-line px-5 py-4">
             <p className="text-[13px] font-medium text-white">AKAASHI Pulse</p>
@@ -173,7 +174,7 @@ export function Nav({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-line bg-canvas/95 px-8 backdrop-blur-md max-md:px-4">
+        <header className="sticky top-0 z-40 flex min-h-16 flex-wrap items-center gap-3 border-b border-line bg-canvas/95 px-8 py-3 backdrop-blur-md max-md:px-4 lg:h-auto xl:grid xl:h-16 xl:grid-cols-[minmax(320px,520px)_minmax(0,1fr)_auto] xl:py-0">
           <div className="relative lg:hidden">
             <button type="button" onClick={() => setMobileOpen((open) => !open)} className="btn btn-line btn-sm w-9 px-0" aria-label="Open navigation" aria-expanded={mobileOpen}>
               {mobileOpen ? <X size={16} /> : <Menu size={16} />}
@@ -196,30 +197,37 @@ export function Nav({
                     })}
                   </div>
                 ))}
+                <div className="mt-2 border-t border-line pt-2">
+                  <Link href="/settings/akaashi-os" onClick={() => setMobileOpen(false)} className="flex h-9 items-center gap-2.5 rounded-md px-2.5 text-sm text-muted hover:bg-wash hover:text-ink">
+                    <KeyRound size={16} aria-hidden />
+                    {t('nav.search.akaashiOs')}
+                  </Link>
+                </div>
               </nav>
             )}
           </div>
           <Link href="/" className="lg:hidden" aria-label="AKAASHI Pulse overview"><Logo className="text-[21px]" /></Link>
-          <div className="absolute left-1/2 hidden w-[min(520px,calc(100%-520px))] -translate-x-1/2 lg:block">
+          <div className="hidden order-3 min-w-0 basis-full lg:block xl:col-start-1 xl:row-start-1 xl:order-none xl:basis-auto xl:w-full xl:max-w-[520px] xl:justify-self-start">
             <GlobalSearch />
           </div>
-          <div className="ml-auto flex shrink-0 items-center gap-2">
+          <div className="order-1 ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2 xl:col-start-3 xl:row-start-1 xl:ml-0 xl:order-none xl:justify-self-end">
+            <CurrencySwitcher />
             {sourceSwitcher && (
               <div className="hidden min-w-0 items-center gap-2 lg:flex" title={t('nav.sourceHint')}>
                 <span className="hidden text-[11px] font-semibold uppercase tracking-[0.06em] text-muted xl:inline">{t('nav.source')}</span>
                 <SourceSwitcher {...sourceSwitcher} />
               </div>
             )}
-            <button type="button" onClick={() => requestRefresh('manual')} disabled={refreshing} className="btn btn-line btn-sm" title="Refresh local analytics">
+            <button type="button" onClick={() => requestRefresh('manual')} disabled={refreshing} className="btn btn-line btn-sm w-9 px-0 sm:w-auto sm:px-2.5" title="Refresh local analytics" aria-label="Refresh local analytics">
               <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} aria-hidden />
               <span className="hidden sm:inline">Refresh</span>
             </button>
-            <Link href="/settings/akaashi-os" className="btn btn-ink btn-sm" title="AKAASHI OS settings">
+            <Link href="/settings/akaashi-os" className="btn btn-ink btn-sm hidden lg:inline-flex" title="AKAASHI OS settings">
               <KeyRound size={14} aria-hidden />
               <span className="hidden md:inline">Connect OS</span>
             </Link>
           </div>
-          <div className="min-w-0 flex-1 lg:hidden">
+          <div className="order-2 basis-full min-w-0 lg:hidden">
             <GlobalSearch />
           </div>
         </header>

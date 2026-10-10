@@ -10,8 +10,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { formatUSD } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import { useT } from '@/lib/i18n/context';
+import { useCurrency } from '@/lib/currency/context';
 
 export interface CostLineDatum {
   label: string;
@@ -22,6 +23,7 @@ export interface CostLineDatum {
 
 export function CostLineChart({ data }: { data: CostLineDatum[] }) {
   const t = useT();
+  const { currency } = useCurrency();
   if (!data.length) {
     return (
       <div className="h-64 flex items-center justify-center text-text-tertiary text-sm">
@@ -43,7 +45,7 @@ export function CostLineChart({ data }: { data: CostLineDatum[] }) {
             minTickGap={32}
           />
           <YAxis
-            tickFormatter={(v) => `$${Number(v).toFixed(0)}`}
+            tickFormatter={(v) => formatCurrency(Number(v), currency, { maxFrac: 0, minFrac: 0 })}
             tick={{ fill: 'rgb(var(--chart-axis))', fontSize: 11 }}
             tickLine={false}
             axisLine={{ stroke: 'rgb(var(--chart-grid))' }}
@@ -58,11 +60,11 @@ export function CostLineChart({ data }: { data: CostLineDatum[] }) {
                   <div className="font-medium text-text-primary mb-2">{label}</div>
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-text-secondary">{t('chart.tooltip.cost')}</span>
-                    <span className="num-mono text-brand">{formatUSD(d.cost)}</span>
+                    <span className="num-mono text-brand">{formatCurrency(d.cost, currency)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4 mt-1">
                     <span className="text-text-secondary">{t('common.savedViaCache', { amount: '' }).trim()}</span>
-                    <span className="num-mono text-success">{formatUSD(d.saved)}</span>
+                    <span className="num-mono text-success">{formatCurrency(d.saved, currency)}</span>
                   </div>
                   {typeof d.requests === 'number' && (
                     <div className="mt-1 flex items-center justify-between gap-4">

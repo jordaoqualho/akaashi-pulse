@@ -21,7 +21,7 @@ import { ProjectSpendChart, type ProjectSpendDatum } from '@/components/charts/p
 import { blockToSerialized } from '@/lib/serialize';
 import {
   formatTokensCompact,
-  formatUSD,
+  formatCurrency,
   formatDuration,
   formatPct,
 } from '@/lib/utils';
@@ -35,6 +35,8 @@ import { AutoRefresh } from '@/components/auto-refresh';
 import { IndexerLoading } from '@/components/indexer-loading';
 import { resolveProjectRootCwd } from '@/lib/project-label';
 import type { AssistantRecord, ModelSummary, ProviderId, UserRecord } from '@/lib/types';
+import { getServerCurrency } from '@/lib/currency/server';
+import { totalActiveTime } from '@/lib/session-insights';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -83,6 +85,7 @@ function buildProjectInsights(
         durationMs: 0,
         sessions: 0,
         requests: 0,
+        href: `/projects/${encodeURIComponent(key)}?source=${sources.length > 1 ? 'all' : sources[0]}`,
       };
       current.cost += project.cost;
       current.sessions += project.sessions;
@@ -122,6 +125,7 @@ async function OverviewContent({ searchParams }: { searchParams: Promise<{ sourc
 
   const t = await getServerT();
   const locale = await getServerLocale();
+  const currency = await getServerCurrency();
   const fmtTokens = (n: number) => formatTokensCompact(n, locale);
 
   const shorten = (m: ModelSummary) => getProvider(m.source).shortenModel(m.model);
@@ -209,7 +213,7 @@ async function OverviewContent({ searchParams }: { searchParams: Promise<{ sourc
   const recentSessions = sources.flatMap((s) =>
     aggregateBySession(scopedRecords, scopedUsers, { source: s }),
   );
-  const trackedTimeMs = recentSessions.reduce((sum, session) => sum + session.durationMs, 0);
+  const trackedTimeMs = totalActiveTime(recentSessions, scopedRecords);
   const costPerHour = trackedTimeMs > 0 ? recentTotals.cost / (trackedTimeMs / 3_600_000) : 0;
   const projectInsights = buildProjectInsights(scopedRecords, scopedUsers, sources);
   const activeDays = trendBuckets.length;
@@ -260,7 +264,7 @@ async function OverviewContent({ searchParams }: { searchParams: Promise<{ sourc
         />
         <KpiCard
           label={t('overview.kpi.thisMonth')}
-          value={formatUSD(month.cost)}
+          value={formatCurrency(month.cost, currency)}
           hint={t('overview.kpi.thisMonth.hint', {
             tokens: fmtTokens(month.totalTokens),
             req: month.requests,
@@ -274,7 +278,7 @@ async function OverviewContent({ searchParams }: { searchParams: Promise<{ sourc
         <KpiCard
           label={t('overview.kpi.cacheHit')}
           value={formatPct(cacheHit, 0)}
-          hint={t('overview.kpi.cacheHit.hint', { amount: formatUSD(today.saved) })}
+          hint={t('overview.kpi.cacheHit.hint', { amount: formatCurrency(today.saved, currency) })}
           accent="success"
           progress={{ value: cacheHit, tone: 'success' }}
         />
@@ -292,7 +296,7 @@ async function OverviewContent({ searchParams }: { searchParams: Promise<{ sourc
         />
         <KpiCard
           label={t('overview.kpi.costPerHour')}
-          value={trackedTimeMs > 0 ? formatUSD(costPerHour, { minFrac: 3, maxFrac: 3 }) : '—'}
+          value={trackedTimeMs > 0 ? formatCurrency(costPerHour, currency, { minFrac: 3, maxFrac: 3 }) : '—'}
           hint={t('overview.kpi.costPerHour.hint')}
           accent="warning"
         />
@@ -362,6 +366,7 @@ async function OverviewContent({ searchParams }: { searchParams: Promise<{ sourc
           emptyLabel={t('overview.projects.empty')}
           sessionsLabel={t('projects.stat.sessions')}
           requestsLabel={t('projects.stat.requests')}
+          currency={currency}
         />
       </Section>
     </PageShell>

@@ -9,7 +9,8 @@ import { KpiCard } from '@/components/kpi-card';
 import { TokenStackChart, type TokenStackDatum } from '@/components/charts/token-stack-chart';
 import { UsageTable } from '@/components/usage-table';
 import { GranularityPicker } from '@/components/granularity-picker';
-import { formatTokensCompact, formatUSD, formatPct } from '@/lib/utils';
+import { formatTokensCompact, formatCurrency, formatPct } from '@/lib/utils';
+import { useCurrency } from '@/lib/currency/context';
 import { type SortKey } from '@/lib/usage-query';
 import type { UsageTurnSummary } from '@/lib/serialize';
 
@@ -91,6 +92,7 @@ interface Props {
 export function UsageDataIsland({ initial, costFootnote }: Props) {
   const t = useT();
   const { locale } = useI18n();
+  const { currency } = useCurrency();
   const sp = useSearchParams();
 
   // Seed the cache with whatever the server-rendered shell handed us.
@@ -184,7 +186,7 @@ export function UsageDataIsland({ initial, costFootnote }: Props) {
         <KpiCard label={t('usage.kpi.totalTokens')} value={formatTokensCompact(data.totals.totalTokens, locale)} />
         <KpiCard
           label={t('usage.kpi.totalCost')}
-          value={formatUSD(data.totals.cost)}
+          value={formatCurrency(data.totals.cost, currency)}
           hint={costFootnote || undefined}
           warning={
             data.totals.unpricedRequests > 0
@@ -192,7 +194,7 @@ export function UsageDataIsland({ initial, costFootnote }: Props) {
               : undefined
           }
         />
-        <KpiCard label={t('usage.kpi.cacheSaved')} value={formatUSD(data.totals.saved)} accent="success" />
+        <KpiCard label={t('usage.kpi.cacheSaved')} value={formatCurrency(data.totals.saved, currency)} accent="success" />
         <KpiCard label={t('usage.kpi.cacheHit')} value={formatPct(cacheHit, 0)} accent="success" />
       </div>
 

@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } f
 import { createPortal } from 'react-dom';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
-  formatUSDPrecise,
+  formatCurrencyPrecise,
   formatDateTime,
   formatDuration,
   formatTokensCompact,
@@ -21,6 +21,8 @@ import { UnpricedBadge } from '@/components/unpriced-badge';
 import { ScrollShadows } from '@/components/scroll-shadows';
 import type { SortKey } from '@/lib/usage-query';
 import { usePendingNav } from '@/lib/use-pending-nav';
+import { useCurrency } from '@/lib/currency/context';
+import type { DisplayCurrency } from '@/lib/currency';
 
 type ColumnId =
   | 'time'
@@ -116,6 +118,7 @@ interface UsageTableProps {
 export function UsageTable({ rows, totalCount, page, pageCount, sort, query, codexFastActive }: UsageTableProps) {
   const t = useT();
   const { locale } = useI18n();
+  const { currency } = useCurrency();
   const pathname = usePathname();
   const params = useSearchParams();
   const { pending, navigate } = usePendingNav();
@@ -420,6 +423,7 @@ export function UsageTable({ rows, totalCount, page, pageCount, sort, query, cod
                     collapseLabel={t('usage.turn.collapse')}
                     activeColumns={activeColumns}
                     locale={locale}
+                    currency={currency}
                     t={t}
                     codexFastActive={codexFastActive}
                   />
@@ -485,6 +489,7 @@ function RowsForTurn({
   collapseLabel,
   activeColumns,
   locale,
+  currency,
   t,
   codexFastActive,
 }: {
@@ -498,6 +503,7 @@ function RowsForTurn({
   collapseLabel: string;
   activeColumns: ColumnDef[];
   locale: Locale;
+  currency: DisplayCurrency;
   t: Translator;
   codexFastActive: boolean;
 }) {
@@ -534,7 +540,7 @@ function RowsForTurn({
             key={c.id}
             className={cn('px-3 py-2', c.align === 'right' ? 'text-right' : 'text-left')}
           >
-            {renderTurnCell(c.id, turn, modelLabel, toolsLabel, userText, locale, t, codexFastActive)}
+            {renderTurnCell(c.id, turn, modelLabel, toolsLabel, userText, locale, currency, t, codexFastActive)}
           </td>
         ))}
       </tr>
@@ -551,7 +557,7 @@ function RowsForTurn({
                   key={c.id}
                   className={cn('px-3 py-1.5', c.align === 'right' ? 'text-right' : 'text-left')}
                 >
-                  {renderChildCell(c.id, r, turn.userText, locale, t, codexFastActive)}
+                  {renderChildCell(c.id, r, turn.userText, locale, currency, t, codexFastActive)}
                 </td>
               ))}
             </tr>
@@ -597,6 +603,7 @@ function renderTurnCell(
   toolsLabel: string,
   userText: string,
   locale: Locale,
+  currency: DisplayCurrency,
   t: Translator,
   codexFastActive: boolean,
 ): React.ReactNode {
@@ -698,7 +705,7 @@ function renderTurnCell(
           align="right"
           maxWidth={300}
           panelClassName="p-0 overflow-hidden"
-          content={<TokenBreakdown row={turn} locale={locale} t={t} />}
+          content={<TokenBreakdown row={turn} locale={locale} currency={currency} t={t} />}
         >
           <span className="num-mono text-text-primary font-medium border-b border-dashed border-border hover:border-text-tertiary cursor-help">
             {formatTokensCompact(turn.totalTokens, locale)}
@@ -715,7 +722,7 @@ function renderTurnCell(
             />
           )}
           <span className="num-mono text-text-primary font-medium">
-            {formatUSDPrecise(turn.cost)}
+            {formatCurrencyPrecise(turn.cost, currency)}
           </span>
         </span>
       );
@@ -736,6 +743,7 @@ function renderChildCell(
   r: UsageTableRow,
   turnPrompt: string,
   locale: Locale,
+  currency: DisplayCurrency,
   t: Translator,
   codexFastActive: boolean,
 ): React.ReactNode {
@@ -818,7 +826,7 @@ function renderChildCell(
           align="right"
           maxWidth={300}
           panelClassName="p-0 overflow-hidden"
-          content={<TokenBreakdown row={r} locale={locale} t={t} />}
+          content={<TokenBreakdown row={r} locale={locale} currency={currency} t={t} />}
         >
           <span className="num-mono border-b border-dashed border-border/60 hover:border-text-tertiary cursor-help">
             {formatTokensCompact(r.totalTokens, locale)}
@@ -829,7 +837,7 @@ function renderChildCell(
       return (
         <span className="inline-flex items-center justify-end gap-1.5 whitespace-nowrap">
           {r.unpriced && <UnpricedBadge label={t('common.unpriced')} title={t('common.unpricedHint')} />}
-          <span className="num-mono">{formatUSDPrecise(r.cost)}</span>
+          <span className="num-mono">{formatCurrencyPrecise(r.cost, currency)}</span>
         </span>
       );
     case 'tools':
@@ -859,10 +867,12 @@ type BreakdownInput = Pick<
 function TokenBreakdown({
   row,
   locale,
+  currency,
   t,
 }: {
   row: BreakdownInput;
   locale: Locale;
+  currency: DisplayCurrency;
   t: Translator;
 }) {
   const items: Array<{ key: string; label: string; tokens: number; cost: number; tone: string; dot: string }> = [
@@ -923,7 +933,7 @@ function TokenBreakdown({
                 {formatTokensCompact(it.tokens, locale)}
               </span>
               <span className="num-mono text-right text-text-secondary">
-                {formatUSDPrecise(it.cost)}
+                {formatCurrencyPrecise(it.cost, currency)}
               </span>
               {it.key === 'output' && row.reasoningTokens > 0 && (
                 <Fragment key="reasoning-detail">
@@ -948,7 +958,7 @@ function TokenBreakdown({
             {formatTokensCompact(row.totalTokens, locale)}
           </span>
           <span className="num-mono text-right text-text-primary font-medium">
-            {formatUSDPrecise(row.cost)}
+                {formatCurrencyPrecise(row.cost, currency)}
           </span>
         </div>
       </div>

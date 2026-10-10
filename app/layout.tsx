@@ -11,6 +11,7 @@ import type { SourceSwitcherProviderInfo } from '@/components/source-switcher';
 import { detectAvailableProviders, listProviders } from '@/lib/providers';
 import { resolveSource } from '@/lib/source';
 import { cookies } from 'next/headers';
+import { getServerCurrency } from '@/lib/currency/server';
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
@@ -32,6 +33,7 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getServerLocale();
   const theme = await getServerTheme();
+  const currency = await getServerCurrency();
   const initialClass = theme === 'light' ? 'theme-light' : 'theme-dark';
   const sidebarCollapsed = (await cookies()).get('ak_sidebar')?.value === 'collapsed';
   const availableSources = await detectAvailableProviders();
@@ -52,7 +54,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <NoFlashScript />
       </head>
       <body className="min-h-screen bg-bg text-text-primary">
-        <Providers locale={locale} theme={theme}>
+        <Providers locale={locale} theme={theme} currency={currency}>
           <Nav
             initialSidebarCollapsed={sidebarCollapsed}
             sourceSwitcher={{

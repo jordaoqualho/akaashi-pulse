@@ -1,17 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowUpRight, BarChart3, Database, DollarSign, Plug, SlidersHorizontal } from 'lucide-react';
+import { ArrowUpRight, BarChart3, Calculator, Database, DollarSign, Plug, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useT } from '@/lib/i18n/context';
 
-export type SettingsTab = 'general' | 'providers' | 'analytics' | 'mcp' | 'pricing';
+export type SettingsTab = 'general' | 'providers' | 'analytics' | 'costs' | 'mcp' | 'pricing';
 export type SettingsNavKey = SettingsTab | 'akaashi-os';
 
 const TABS = [
   { key: 'general', icon: SlidersHorizontal, labelKey: 'settings.nav.general' },
   { key: 'providers', icon: Database, labelKey: 'settings.nav.providers' },
   { key: 'analytics', icon: BarChart3, labelKey: 'settings.nav.analytics' },
+  { key: 'costs', icon: Calculator, labelKey: 'settings.nav.costs' },
   { key: 'mcp', icon: Plug, labelKey: 'settings.nav.mcp' },
   { key: 'pricing', icon: DollarSign, labelKey: 'settings.nav.pricing' },
 ] as const;

@@ -3,8 +3,9 @@ import { aggregateByModel, aggregateByTime } from '@/lib/aggregator';
 import { Section, PageShell, EmptyState } from '@/components/section';
 import { TokenStackChart, type TokenStackDatum } from '@/components/charts/token-stack-chart';
 import { UnpricedBadge } from '@/components/unpriced-badge';
-import { formatTokensCompact, formatUSD, formatPct } from '@/lib/utils';
+import { formatTokensCompact, formatCurrency, formatPct } from '@/lib/utils';
 import { getServerT, getServerLocale } from '@/lib/i18n/server';
+import { getServerCurrency } from '@/lib/currency/server';
 import { resolveSource, filterBySource, expandSources } from '@/lib/source';
 import { combineTimeBuckets } from '@/lib/source-merge';
 import { getProvider } from '@/lib/providers';
@@ -21,6 +22,7 @@ export default async function ModelsPage({
   const source = await resolveSource(sp.source);
   const t = await getServerT();
   const locale = await getServerLocale();
+  const currency = await getServerCurrency();
   const scan = await getCachedScan();
   const records = filterBySource(scan.records, source);
   const sources = expandSources(source);
@@ -99,7 +101,7 @@ export default async function ModelsPage({
                   )
                 )}
               </div>
-              <div className="num-hero">{formatUSD(m.cost)}</div>
+              <div className="num-hero">{formatCurrency(m.cost, currency)}</div>
               <div className="text-xs text-text-secondary">
                 {t('models.field.pctOfTotal', {
                   pct: formatPct(costPct, 0),
@@ -113,15 +115,15 @@ export default async function ModelsPage({
                 <div className="text-text-tertiary">{t('models.field.requests')}</div>
                 <div className="num-mono text-right text-text-primary">{m.requests}</div>
                 <div className="text-text-tertiary">{t('models.field.savedByCache')}</div>
-                <div className="num-mono text-right text-success">{formatUSD(m.saved)}</div>
+                <div className="num-mono text-right text-success">{formatCurrency(m.saved, currency)}</div>
                 {m.pricing && (
                   <>
                     <div className="text-text-tertiary">{t('models.field.input1M')}</div>
-                    <div className="num-mono text-right text-text-secondary">{formatUSD(m.pricing.input)}</div>
+                    <div className="num-mono text-right text-text-secondary">{formatCurrency(m.pricing.input, currency)}</div>
                     <div className="text-text-tertiary">{t('models.field.output1M')}</div>
-                    <div className="num-mono text-right text-text-secondary">{formatUSD(m.pricing.output)}</div>
+                    <div className="num-mono text-right text-text-secondary">{formatCurrency(m.pricing.output, currency)}</div>
                     <div className="text-text-tertiary">{t('models.field.cacheRead1M')}</div>
-                    <div className="num-mono text-right text-text-secondary">{formatUSD(m.pricing.cacheRead)}</div>
+                    <div className="num-mono text-right text-text-secondary">{formatCurrency(m.pricing.cacheRead, currency)}</div>
                   </>
                 )}
               </div>

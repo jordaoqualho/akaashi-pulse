@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { cn, formatUSD, formatTokensCompact } from '@/lib/utils';
+import { cn, formatCurrency, formatTokensCompact } from '@/lib/utils';
 import type { SerializedProgress } from '@/lib/serialize';
 import { useT, useI18n } from '@/lib/i18n/context';
+import { useCurrency } from '@/lib/currency/context';
 
 interface Props {
   initial: SerializedProgress;
@@ -28,6 +29,7 @@ export function BlockProgress({
 }: Props) {
   const t = useT();
   const { locale } = useI18n();
+  const { currency } = useCurrency();
   const fmtTokens = (n: number) => formatTokensCompact(n, locale);
 
   const cardCls = cn(
@@ -89,7 +91,7 @@ export function BlockProgress({
       <div className="mt-4 pt-4 border-t border-border grid grid-cols-2 gap-3 text-xs">
         <div>
           <div className="text-text-tertiary">{t('block.spentSoFar')}</div>
-          <div className="num-mono text-text-primary mt-0.5 text-base">{formatUSD(initial.cost)}</div>
+          <div className="num-mono text-text-primary mt-0.5 text-base">{formatCurrency(initial.cost, currency)}</div>
         </div>
         <div>
           <div className="text-text-tertiary">{t('block.burnPerMin')}</div>
@@ -99,7 +101,7 @@ export function BlockProgress({
         </div>
         <div>
           <div className="text-text-tertiary">{t('block.projectedTotal')}</div>
-          <div className="num-mono text-text-secondary mt-0.5">{formatUSD(initial.projectedCost)}</div>
+          <div className="num-mono text-text-secondary mt-0.5">{formatCurrency(initial.projectedCost, currency)}</div>
         </div>
         <div>
           <div className="text-text-tertiary">{t('block.requests')}</div>

@@ -89,6 +89,7 @@ export function MultiSelect({
     const next = new URLSearchParams(params.toString());
     if (set.size === 0) next.delete(paramKey);
     else next.set(paramKey, Array.from(set).join(','));
+    next.delete('page');
     const qs = next.toString();
     navigate(qs ? `${pathname}?${qs}` : pathname);
   }
