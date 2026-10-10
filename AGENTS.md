@@ -47,7 +47,8 @@ editing and the slower first compile.
 ## Commands
 
 ```bash
-pnpm dev              # manual dashboard on :3738
+pnpm dev              # manual dashboard on :3738 (builds into .next-dev)
+pnpm demo             # dashboard on synthetic data on :3739 (HOME=.demo-home)
 pnpm typecheck
 pnpm lint
 pnpm test             # parser, pricing, aggregation, guard scripts
@@ -64,6 +65,11 @@ node bin/cli.mjs doctor
 
 Do **not** commit, tag, release, or open PRs unless the user explicitly asks in
 the current turn.
+
+`pnpm dev` and `pnpm demo` use their own `distDir` (`.next-dev`, `.next-demo`;
+see `next.config.mjs`) so they never delete `.next/standalone`, which the
+background service runs from. Use `pnpm demo` for screenshots and docs — never
+publish images or fixtures that contain real prompts, paths, or project names.
 
 ## Environment variables
 
@@ -107,9 +113,10 @@ legacy third-party product names in code, docs, or user-visible strings.
    duplicate refresh events.
 
 6. Codex `token_count` may include `rate_limits`; Claude limits arrive through
-   the supported `scripts/claude-statusline.mjs` sidecar. Persist the latest
-   local snapshot and show it on Limits. Do not infer quotas from tokens or
-   cost. Cursor and Antigravity never claim quota telemetry.
+   the supported `scripts/claude-statusline.mjs` sidecar or explicit quota
+   events in its JSONL. Persist the latest local snapshot and show it on
+   Limits. Do not infer quotas from tokens or cost. Cursor and Antigravity
+   never claim quota telemetry.
 
 7. Pricing: committed offline snapshot + optional LiteLLM overlay on disk. CLI
    and MCP stay offline; only the dashboard may refresh prices.
@@ -137,6 +144,26 @@ legacy third-party product names in code, docs, or user-visible strings.
 - Reuse AKAASHI primitives in `app/globals.css`; red dot is the brand accent.
 - Minimize diff scope; match existing style.
 - `LICENSE` is MIT (Jordão Qualho) — retain notice when redistributing.
+
+### UI quality gate
+
+Do not add generic “card grids” or copy-pasted form panels. Every new surface
+must have a product-specific composition and a clear job: identify the active
+context, show the important value, and make the next action obvious. Before
+shipping a UI change, check:
+
+1. The component uses the existing AKAASHI tokens and one consistent radius
+   scale; do not mix arbitrary shadows, colors, or control heights.
+2. Repeated entities use a deliberate hierarchy (for example, a selected
+   provider rail plus a detail inspector), not four identical cards with a
+   different label.
+3. A real loading, empty, disabled, and error state exists where the data can
+   be unavailable. Do not use a spinner as the only feedback.
+4. Inputs have labels above them, helper text when the choice affects meaning,
+   and a visible source or explanation for prices, estimates, and derived data.
+5. Review the full route after editing: desktop and mobile layout, focus state,
+   text wrapping, contrast, and whether the new component looks like Pulse
+   rather than a default Tailwind template.
 
 ## Parser / build preflight
 
