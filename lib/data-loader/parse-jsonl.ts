@@ -1,6 +1,8 @@
 import { createReadStream } from 'node:fs';
 import readline from 'node:readline';
-import type { AssistantRecord, RawRecord, ToolUseRef, UserRecord } from '../types';
+import type { AgentLimitSnapshot, AssistantRecord, RawRecord, ToolUseRef, UserRecord } from '../types';
+import type { ParsedFile } from '../providers/types';
+import { promptPreview } from '../session-title.ts';
 
 const TEXT_PREVIEW_MAX = 200;
 
@@ -74,16 +76,13 @@ function skillNameFromText(text: string): string | null {
   return base || null;
 }
 
-export async function parseJsonlFile(file: string): Promise<{
-  assistant: AssistantRecord[];
-  user: UserRecord[];
-  parentLinks: Array<[string, string | null]>;
-}> {
+export async function parseJsonlFile(file: string): Promise<ParsedFile> {
   const stream = createReadStream(file, { encoding: 'utf8' });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
   const assistant: AssistantRecord[] = [];
   const user: UserRecord[] = [];
   const parentLinks: Array<[string, string | null]> = [];
+  let latestLimitSnapshot: AgentLimitSnapshot | undefined;
 
   for await (const line of rl) {
     if (!line.trim()) continue;
@@ -97,6 +96,14 @@ export async function parseJsonlFile(file: string): Promise<{
 
     if (raw.uuid) parentLinks.push([raw.uuid, raw.parentUuid ?? null]);
 
+    const limitSnapshot = parseClaudeQuotaSnapshot(raw);
+    if (
+      limitSnapshot &&
+      (!latestLimitSnapshot || limitSnapshot.observedAt >= latestLimitSnapshot.observedAt)
+    ) {
+      latestLimitSnapshot = limitSnapshot;
+    }
+
     if (raw.type === 'assistant') {
       const a = parseAssistant(raw, file);
       if (a) assistant.push(a);
@@ -106,7 +113,72 @@ export async function parseJsonlFile(file: string): Promise<{
     }
   }
 
-  return { assistant, user, parentLinks };
+  return { assistant, user, parentLinks, limitSnapshot: latestLimitSnapshot };
+}
+
+/**
+ * Claude Code persists a compact quota error on assistant records when a
+ * request is rejected. This is a real account-limit signal, unlike the token
+ * totals in the same JSONL file, so it is safe to surface as a reached window.
+ * The richer 5h/7d percentages still come from the status-line sidecar when
+ * Claude provides them.
+ */
+function parseClaudeQuotaSnapshot(raw: RawRecord): AgentLimitSnapshot | undefined {
+  const record = raw as unknown as Record<string, unknown>;
+  const quota = isRecord(record.quotaLimits)
+    ? record.quotaLimits
+    : isRecord(record.apiErrorParams) && isRecord(record.apiErrorParams.rate_limit_info)
+      ? record.apiErrorParams.rate_limit_info
+      : null;
+  if (!quota) return undefined;
+
+  const rateLimitType = stringValue(quota.rateLimitType);
+  const status = stringValue(quota.status);
+  const resetAt = epochToIso(quota.resetsAt);
+  if (!rateLimitType || !resetAt || !isReachedStatus(status)) return undefined;
+
+  const normalizedType = rateLimitType.toLowerCase();
+  const windowMinutes = normalizedType === 'seven_day' || normalizedType === 'secondary'
+    ? 10080
+    : normalizedType === 'five_hour' || normalizedType === 'primary'
+      ? 300
+      : null;
+  if (!windowMinutes) return undefined;
+
+  const timestamp = typeof raw.timestamp === 'string' && !Number.isNaN(Date.parse(raw.timestamp))
+    ? raw.timestamp
+    : new Date().toISOString();
+  return {
+    source: 'claude',
+    observedAt: timestamp,
+    windows: [{
+      id: windowMinutes === 300 ? 'five_hour' : 'seven_day',
+      usedPercent: 100,
+      windowMinutes,
+      resetsAt: resetAt,
+    }],
+    planType: null,
+    rateLimitReachedType: rateLimitType,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function isReachedStatus(value: string): boolean {
+  return value === 'rejected' || value === 'exceeded' || value === 'exceeded_limit';
+}
+
+function epochToIso(value: unknown): string | null {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return null;
+  const date = new Date(number < 1_000_000_000_000 ? number * 1000 : number);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function parseAssistant(raw: RawRecord, file: string): AssistantRecord | null {
@@ -172,7 +244,7 @@ function parseUser(raw: RawRecord, file: string): UserRecord | null {
   const msg = raw.message as Record<string, unknown> | undefined;
   const content = msg?.content;
   const fullText = extractUserText(content);
-  const textPreview = (renderSlashCommand(fullText) ?? fullText).slice(0, TEXT_PREVIEW_MAX);
+  const textPreview = renderSlashCommand(fullText)?.slice(0, TEXT_PREVIEW_MAX) ?? promptPreview(fullText, TEXT_PREVIEW_MAX);
 
   let toolResults: Array<{ toolUseId: string; chars: number }> | undefined;
   if (Array.isArray(content)) {

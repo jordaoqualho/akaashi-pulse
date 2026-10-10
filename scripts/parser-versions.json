@@ -1,6 +1,6 @@
 {
-  "claude": "claude-v7-meta-injected-synthetic",
-  "codex": "codex-v15-rate-limits",
+  "claude": "claude-v9-prompt-previews",
+  "codex": "codex-v16-prompt-previews",
   "cursor": "cursor-v1-flat-and-nested-transcripts",
   "antigravity": "antigravity-v1-transcript"
 }

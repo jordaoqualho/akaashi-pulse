@@ -51,7 +51,7 @@ export const codexAdapter: ProviderAdapter = {
   logoSrc: '/codex-logo.webp',
   exportsLimitTelemetry: true,
 
-  parserVersion: 'codex-v15-rate-limits',
+  parserVersion: 'codex-v16-prompt-previews',
   capabilities: {
     hasCacheCreation: false,
     hasReasoningTokens: true,

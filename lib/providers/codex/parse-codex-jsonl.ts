@@ -3,6 +3,7 @@ import readline from 'node:readline';
 import type { AgentLimitSnapshot, AssistantRecord, UserRecord } from '@/lib/types';
 import type { ParsedFile, SpawnedSessionLink } from '../types';
 import { splitModelRoute } from './model-route.js';
+import { promptPreview } from '../../session-title.ts';
 
 const TEXT_PREVIEW_MAX = 200;
 
@@ -232,7 +233,7 @@ export async function parseCodexJsonlFile(file: string): Promise<ParsedFile> {
       timestamp,
       sessionId,
       cwd: turn.cwd || defaultCwd,
-      textPreview: text.slice(0, TEXT_PREVIEW_MAX),
+      textPreview: promptPreview(text, TEXT_PREVIEW_MAX),
       filePath: file,
       // Mirrors Claude's parse-jsonl: a sidechain user is synthetic, so it
       // never roots a turn of its own and the walk continues to the spawner.

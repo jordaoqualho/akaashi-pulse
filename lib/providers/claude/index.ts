@@ -88,7 +88,7 @@ export const claudeAdapter: ProviderAdapter = {
   logoSrc: '/claude-logo.webp',
   exportsLimitTelemetry: true,
 
-  parserVersion: 'claude-v7-meta-injected-synthetic',
+  parserVersion: 'claude-v9-prompt-previews',
   capabilities: {
     hasCacheCreation: true,
     hasReasoningTokens: false,
