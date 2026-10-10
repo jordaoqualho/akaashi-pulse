@@ -10,6 +10,9 @@ coverage/
 
 # next.js
 .next/
+.next-dev/
+.next-demo/
+.demo-home/
 out/
 next-env.d.ts
 

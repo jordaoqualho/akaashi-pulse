@@ -12,6 +12,9 @@ export default [
   {
     ignores: [
       '.next/**',
+      '.next-dev/**',
+      '.next-demo/**',
+      '.demo-home/**',
       'node_modules/**',
       '.next-test/**',
       'dist/**',

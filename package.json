@@ -2,7 +2,7 @@
   "name": "akaashi-pulse",
   "version": "1.0.0",
   "private": true,
-  "description": "AKAASHI Pulse — local AI development analytics for Claude Code and Codex",
+  "description": "Local-first analytics for AI coding agents — cost, tokens, sessions, and limits for Claude Code, Codex CLI, Cursor, and Antigravity",
   "keywords": [
     "claude",
     "claude-code",
@@ -13,7 +13,13 @@
     "dashboard",
     "cli",
     "tokens",
-    "cost"
+    "cost",
+    "cursor",
+    "antigravity",
+    "mcp",
+    "analytics",
+    "local-first",
+    "ai-agents"
   ],
   "license": "MIT",
   "author": "Jordão Qualho",
@@ -44,6 +50,8 @@
   },
   "scripts": {
     "dev": "next dev -p 3738",
+    "demo": "node scripts/demo.mjs",
+    "demo:data": "node scripts/demo-data.mjs",
     "build": "next build && node scripts/build-mcp.mjs && node scripts/build-report.mjs && node scripts/postbuild.mjs && node scripts/smoke-standalone.mjs",
     "build:mcp": "node scripts/build-mcp.mjs",
     "build:report": "node scripts/build-report.mjs",
@@ -52,7 +60,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "update-pricing": "node scripts/update-pricing.mjs",
-  "test": "node --experimental-strip-types --no-warnings scripts/test-codex-parser.mjs && node --experimental-strip-types --no-warnings scripts/test-claude-statusline.mjs && node --experimental-strip-types --no-warnings scripts/test-cursor-parser.mjs && node --experimental-strip-types --no-warnings scripts/test-antigravity-parser.mjs && node --experimental-strip-types --no-warnings scripts/test-pricing-snapshot.mjs && node --experimental-strip-types --no-warnings scripts/test-pricing-store.mjs && node --experimental-strip-types --no-warnings scripts/test-turns.mjs && node --experimental-strip-types --no-warnings scripts/test-index-persist.mjs && node --experimental-strip-types --no-warnings scripts/test-sidechain.mjs && node --experimental-strip-types --no-warnings scripts/test-source-merge.mjs && node --experimental-strip-types --no-warnings scripts/test-cost-from-usage.mjs && node --experimental-strip-types --no-warnings scripts/test-range.mjs && node --experimental-strip-types --no-warnings scripts/test-project-scope.mjs && node scripts/test-unpriced.mjs && node scripts/check-parser-versions.mjs",
+    "test": "node --experimental-strip-types --no-warnings scripts/test-codex-parser.mjs && node --experimental-strip-types --no-warnings scripts/test-claude-statusline.mjs && node --experimental-strip-types --no-warnings scripts/test-cursor-parser.mjs && node --experimental-strip-types --no-warnings scripts/test-antigravity-parser.mjs && node --experimental-strip-types --no-warnings scripts/test-pricing-snapshot.mjs && node --experimental-strip-types --no-warnings scripts/test-pricing-store.mjs && node --experimental-strip-types --no-warnings scripts/test-turns.mjs && node --experimental-strip-types --no-warnings scripts/test-index-persist.mjs && node --experimental-strip-types --no-warnings scripts/test-sidechain.mjs && node --experimental-strip-types --no-warnings scripts/test-source-merge.mjs && node --experimental-strip-types --no-warnings scripts/test-cost-from-usage.mjs && node --experimental-strip-types --no-warnings scripts/test-range.mjs && node --experimental-strip-types --no-warnings scripts/test-session-title.mjs && node --experimental-strip-types --no-warnings scripts/test-project-scope.mjs && node scripts/test-unpriced.mjs && node scripts/check-parser-versions.mjs",
     "test:mcp": "node scripts/test-mcp-server.mjs",
     "clean": "node -e \"for (const p of ['.next','node_modules','tsconfig.tsbuildinfo']) require('node:fs').rmSync(p,{recursive:true,force:true})\"",
     "doctor": "node bin/cli.mjs doctor"

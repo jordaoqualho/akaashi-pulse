@@ -55,6 +55,8 @@ const ROUTES = [
   { path: '/sessions', expect: [200] },
   { path: '/projects', expect: [200] },
   { path: '/models', expect: [200] },
+  { path: '/insights', expect: [200] },
+  { path: '/limits', expect: [200] },
   { path: '/settings', expect: [200] },
   { path: '/api/scan', expect: [200] },
   { path: '/api/pricing', expect: [200] },
