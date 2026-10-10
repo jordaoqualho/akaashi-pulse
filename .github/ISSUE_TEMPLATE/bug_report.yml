@@ -1,0 +1,50 @@
+name: Bug report
+description: Something in the dashboard, CLI, or MCP server is wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Please redact prompts, file paths, and project names** before posting. Reproducing with `pnpm demo` is ideal.
+        Security or privacy problems go through [private reporting](https://github.com/jordaoqualho/akaashi-pulse/security/advisories/new), not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `pnpm demo`
+        2. Open Insights and pick 7d
+        3. …
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where?
+      options: [Dashboard, CLI report, Login service, MCP server, Parser / totals]
+    validations:
+      required: true
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent
+      multiple: true
+      options: [Claude Code, Codex CLI, Cursor, Antigravity, Not agent-specific]
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`node bin/cli.mjs doctor` output"
+      description: Redact your home directory and project names.
+      render: text
+  - type: input
+    id: env
+    attributes:
+      label: OS, Node.js, and Pulse version
+      placeholder: macOS 15.4, Node 22.11, 1.0.0 (commit abc1234)
